@@ -8,6 +8,7 @@ import 'package:seaofsea/vievs/auth_page.dart';
 import 'package:seaofsea/vievs/home_page.dart';
 
 void main() {
+  print("main");
   runApp(
     MultiProvider(
       providers: [
