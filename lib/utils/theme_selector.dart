@@ -1,27 +1,134 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:seaofsea/utils/color_blindness_provider.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 
 class ThemeSelector extends StatelessWidget {
-  const ThemeSelector({
-    super.key,
-    required this.themeProvider,
-  });
-
-  final ThemeProvider themeProvider;
+  const ThemeSelector({super.key, required ThemeProvider themeProvider});
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final colorBlindnessProvider =
+        Provider.of<ColorBlindnessProvider>(context);
+
+    return PopupMenuButton<String>(
       icon: Icon(
-        themeProvider.isDarkMode
-            ? Icons.light_mode // Koyu temada açık tema simgesi
-            : Icons.dark_mode, // Açık temada koyu tema simgesi
+        themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
       ),
-      onPressed: () {
-        final themeProvider =
-            Provider.of<ThemeProvider>(context, listen: false);
-        themeProvider.toggleTheme(); // Temayı değiştir
+      onSelected: (value) {
+        if (value == 'Light') {
+          if (themeProvider.isDarkMode) themeProvider.toggleTheme();
+        } else if (value == 'Dark') {
+          if (!themeProvider.isDarkMode) themeProvider.toggleTheme();
+        } else if (value == 'BlurLevel') {
+          _showBlurSlider(context, colorBlindnessProvider);
+        } else if (value == 'EffectToggle') {
+          colorBlindnessProvider.toggleEffect();
+        } else {
+          colorBlindnessProvider.setEffect(value);
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'Light', child: Text('Light Theme')),
+        const PopupMenuItem(value: 'Dark', child: Text('Dark Theme')),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: ColorBlindnessProvider.protanopia,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Protanopia'),
+              if (colorBlindnessProvider.currentEffect ==
+                  ColorBlindnessProvider.protanopia)
+                const Icon(Icons.check, color: Colors.blue),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: ColorBlindnessProvider.deuteranopia,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Deuteranopia'),
+              if (colorBlindnessProvider.currentEffect ==
+                  ColorBlindnessProvider.deuteranopia)
+                const Icon(Icons.check, color: Colors.blue),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: ColorBlindnessProvider.tritanopia,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Tritanopia'),
+              if (colorBlindnessProvider.currentEffect ==
+                  ColorBlindnessProvider.tritanopia)
+                const Icon(Icons.check, color: Colors.blue),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: ColorBlindnessProvider.achromatopsia,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Achromatopsia'),
+              if (colorBlindnessProvider.currentEffect ==
+                  ColorBlindnessProvider.achromatopsia)
+                const Icon(Icons.check, color: Colors.blue),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'BlurLevel',
+          child: const Text('Set Blur Level'),
+        ),
+        PopupMenuItem(
+          value: 'EffectToggle',
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Effect On/Off'),
+              Switch(
+                value: colorBlindnessProvider.isEffectOn,
+                onChanged: (value) {
+                  colorBlindnessProvider.toggleEffect();
+                  Navigator.pop(context); // Menü kapatılır
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showBlurSlider(
+      BuildContext context, ColorBlindnessProvider provider) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Set Blur Level'),
+          content: Slider(
+            value: provider.blurLevel,
+            min: 0.0,
+            max: 9.0,
+            divisions: 10,
+            label: '${provider.blurLevel.toInt() * 10}%',
+            onChanged: (value) {
+              provider.setBlurLevel(value);
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        );
       },
     );
   }

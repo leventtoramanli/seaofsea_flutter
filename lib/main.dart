@@ -1,7 +1,10 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
+import 'package:seaofsea/utils/color_blindness_provider.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/utils/theme_selector.dart';
@@ -14,9 +17,10 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         Provider<ApiManager>(
-            create: (_) =>
-                ApiManager(baseUrl: 'https://seaofsea.com', baseAddress: '/public/api')),
+            create: (_) => ApiManager(
+                baseUrl: 'https://seaofsea.com', baseAddress: '/public/api')),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ColorBlindnessProvider()),
       ],
       child: const MmsApp(),
     ),
@@ -30,12 +34,35 @@ class MmsApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final colorBlindnessProvider = Provider.of<ColorBlindnessProvider>(context);
     return MaterialApp(
       title: 'SeaOfSea',
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: themeProvider.themeMode,
-      home: const MainPage(),
+      home: Stack(
+        children: [
+          ColorFiltered(
+            colorFilter: colorBlindnessProvider.currentFilter,
+            child: const MainPage(),
+          ),
+          if (colorBlindnessProvider.isEffectOn &&
+              colorBlindnessProvider.currentEffect ==
+                  ColorBlindnessProvider.blur)
+            IgnorePointer(
+              ignoring: true,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: colorBlindnessProvider.blurLevel.clamp(0.0, 5.0),
+                  sigmaY: colorBlindnessProvider.blurLevel.clamp(0.0, 5.0),
+                ),
+                child: Container(
+                  color: Colors.black.withOpacity(0.1), // Hafif bir renk
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -60,7 +87,11 @@ class _MainPageState extends State<MainPage> {
           ThemeSelector(themeProvider: themeProvider),
         ],
       ),
-      body: authProvider.isLoggedIn ? const HomePage() : const AuthPage(mode: AuthMode.login,),
+      body: authProvider.isLoggedIn
+          ? const HomePage()
+          : const AuthPage(
+              mode: AuthMode.login,
+            ),
     );
   }
 }
