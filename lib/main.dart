@@ -54,6 +54,7 @@ class _MainPageState extends State<MainPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("SeaOfSea"),
+        centerTitle: true,
         actions: [
           IconButton(
             icon: Icon(
