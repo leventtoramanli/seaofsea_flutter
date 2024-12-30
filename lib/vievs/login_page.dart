@@ -5,6 +5,7 @@ import 'package:seaofsea/utils/quotes.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/vievs/auth_page.dart';
+import 'package:seaofsea/vievs/register_page.dart';
 import 'package:seaofsea/vievs/terms.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
 
@@ -173,45 +174,83 @@ class _LoginPageState extends State<LoginPage> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
-                        child: CheckboxListTile(
-                          controlAffinity: ListTileControlAffinity.leading,
-                          value: _rememberMe,
-                          onChanged: (value) {
-                            setState(() {
-                              _rememberMe = value ?? false;
-                            });
-                          },
-                          title: const Text(
-                            'Remember me',
-                            style: TextStyle(fontSize: 14.0),
-                          ),
-                          subtitle: InkWell(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const Terms(),
-                                ),
-                              );
-                            },
-                            child: const Text(
-                              'Read Terms & Conditions',
-                              style: TextStyle(
-                                fontSize: 14.0,
-                                color: Colors.blue,
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: _rememberMe,
+                              onChanged: (value) {
+                                setState(() {
+                                  _rememberMe = value ?? false;
+                                });
+                              },
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _rememberMe = !_rememberMe;
+                                });
+                              },
+                              child: const Text(
+                                'Remember me',
+                                style: TextStyle(fontSize: 14.0),
                               ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
                       CustomButton(
                         label: 'Login',
-                        onPressed: () {},
+                        onPressed: () {
+                          // Login işlemi
+                        },
                         icon: Icons.login,
                         isLoading: false,
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12.0),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const Terms(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Terms & Conditions',
+                          style: TextStyle(
+                            fontSize: 14.0,
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const RegisterPage(),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          'Forgot Password?',
+                          style: TextStyle(
+                            fontSize: 14.0,
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12.0),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -282,10 +321,17 @@ class _LoginPageState extends State<LoginPage> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12.0),
           clipBehavior: Clip.antiAlias,
-          child: Image(
+          child: FadeInImage.assetNetwork(
+              placeholder: 'asssets/placeholder.png',
+              image: 'assets/logo.png',
+              height: imgSize,
+              width: imgSize,
+              fit: BoxFit.cover),
+
+          /*Image(
             image: const AssetImage('assets/logo.png'),
             height: imgSize,
-          ),
+          ),*/
         ),
       ),
     );

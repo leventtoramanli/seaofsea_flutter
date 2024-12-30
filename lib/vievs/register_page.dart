@@ -14,11 +14,9 @@ import 'package:seaofsea/widgets/custom_form_field.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
-  
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
-  
 }
 
 class _RegisterPageState extends State<RegisterPage> {
@@ -68,7 +66,7 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    
+
     exWidth = MediaQuery.of(context).size.width * 0.6;
     if (exWidth < 650) {
       wideScreen = false;
@@ -324,99 +322,4 @@ class _RegisterPageState extends State<RegisterPage> {
       ),
     );
   }
-
-
-
-Widget formTField(
-    TextEditingController controller,
-    ThemeProvider themeProvider,
-    String label,
-    String hint,
-    Icon icon,
-    String turner, {
-    bool isPassword = false,
-    bool isEmail = false,
-    bool isNumeric = false,
-    bool isDate = false, // Tarih seçimi için yeni parametre
-    BuildContext? context,
-  }) {
-  bool obsText = isPassword;
-
-  return StatefulBuilder(builder: (context, setState) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obsText,
-      readOnly: isDate, // Tarih seçimi için klavye kapatılır
-      onTap: isDate
-          ? () async {
-              final selectedDate = await showDatePicker(
-                context: context,
-                initialDate: DateTime.now(),
-                firstDate: DateTime(1900),
-                lastDate: DateTime.now(),
-              );
-              if (selectedDate != null) {
-                controller.text = DateFormat('yyyy-MM-dd').format(selectedDate);
-              }
-            }
-          : null,
-      keyboardType: isEmail
-          ? TextInputType.emailAddress
-          : isNumeric
-              ? TextInputType.number
-              : TextInputType.text,
-      textInputAction: TextInputAction.next,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: icon,
-        suffixIcon: isPassword
-            ? IconButton(
-                icon: Icon(obsText ? Icons.visibility : Icons.visibility_off),
-                onPressed: () {
-                  setState(() {
-                    obsText = !obsText;
-                  });
-                },
-              )
-            : null,
-        filled: true,
-        fillColor: themeProvider.isDarkMode
-            ? Colors.grey.shade800
-            : Colors.grey.shade200,
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(
-              color: themeProvider.isDarkMode
-                  ? Colors.blueGrey.shade200
-                  : Colors.blueGrey.shade400),
-          borderRadius: BorderRadius.circular(10.0),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderSide: const BorderSide(color: Colors.red),
-          borderRadius: BorderRadius.circular(10.0),
-        ),
-        border: OutlineInputBorder(
-          borderSide: BorderSide(
-              color: themeProvider.isDarkMode ? Colors.white : Colors.black),
-          borderRadius: BorderRadius.circular(10.0),
-        ),
-      ),
-      inputFormatters: isNumeric
-          ? [FilteringTextInputFormatter.digitsOnly]
-          : null, // Sadece sayı girişine izin verir
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return turner;
-        } else if (isPassword && value.length < 6) {
-          return 'Password must be at least 6 characters';
-        } else if (isEmail &&
-            !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-          return 'Please enter a valid email';
-        }
-        return null;
-      },
-    );
-  });
-}
-
 }
