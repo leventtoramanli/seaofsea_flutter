@@ -38,3 +38,19 @@ class SecureStorage {
     await prefs.remove(key);
   }
 }
+/*
+"Bir limandan diğerine yol alırken, her adım bir hikaye yazar."
+"Deniz, her yolcunun kendi yıldızını bulduğu sonsuz bir haritadır."
+"Gökyüzü ne kadar kararsa, yıldızlar o kadar parlak rehberlik eder."
+"Bir gemi limanda güvenlidir, ama gemiler limanda kalmak için yapılmaz."
+"Bir denizci için engeller, sadece yeni rotalar keşfetmenin başlangıcıdır."
+"Dalgalara direnmek yerine, onlarla yol almayı öğren."
+"Bir denizcinin pusulası, onun kararlılığıdır."
+"Göklerde ve denizlerde bir milletin bağımsızlık ruhu saklıdır."
+"Ufka bakanlar, engelleri değil, fırsatları görür."
+"Hayat, bir deniz gibi; bazen dalgalı, bazen durgun, ama her zaman derin."
+"Deniz, bize sabrı, cesareti ve anı yaşamanın değerini öğretir."
+"Deniz bize şunu söyler: Yola çıkmazsan hiçbir yere varamazsın."
+"Yelken açmak cesaret ister; ama unutma, rüzgarın gücünü ancak yola çıkanlar hissedebilir."
+"Fırtına her zaman korkutucu değildir; bazen seni beklenmedik yerlere götürür."
+*/

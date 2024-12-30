@@ -4,6 +4,7 @@ import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
+import 'package:seaofsea/utils/theme_selector.dart';
 import 'package:seaofsea/vievs/auth_page.dart';
 import 'package:seaofsea/vievs/home_page.dart';
 
@@ -56,18 +57,7 @@ class _MainPageState extends State<MainPage> {
         title: const Text("SeaOfSea"),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: Icon(
-              themeProvider.isDarkMode
-                  ? Icons.light_mode // Koyu temada açık tema simgesi
-                  : Icons.dark_mode, // Açık temada koyu tema simgesi
-            ),
-            onPressed: () {
-              final themeProvider =
-                  Provider.of<ThemeProvider>(context, listen: false);
-              themeProvider.toggleTheme(); // Temayı değiştir
-            },
-          ),
+          ThemeSelector(themeProvider: themeProvider),
         ],
       ),
       body: authProvider.isLoggedIn ? const HomePage() : const AuthPage(mode: AuthMode.login,),

@@ -1,0 +1,118 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:seaofsea/utils/theme_provider.dart';
+
+class CustomFormField extends StatelessWidget {
+  final TextEditingController controller;
+  final ThemeProvider themeProvider;
+  final String label;
+  final String hint;
+  final IconData icon;
+  final String validationMessage;
+  final bool isPassword;
+  final bool isEmail;
+  final bool isNumeric;
+  final bool isDate;
+  final BuildContext? context;
+
+  const CustomFormField({
+    super.key,
+    required this.controller,
+    required this.themeProvider,
+    required this.label,
+    required this.hint,
+    required this.icon,
+    required this.validationMessage,
+    this.isPassword = false,
+    this.isEmail = false,
+    this.isNumeric = false,
+    this.isDate = false,
+    this.context,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    bool obsText = isPassword;
+
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return TextFormField(
+          controller: controller,
+          obscureText: obsText,
+          readOnly: isDate, // Tarih seçimi için klavye kapatılır
+          onTap: isDate
+              ? () async {
+                  final selectedDate = await showDatePicker(
+                    context: this.context!,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(1900),
+                    lastDate: DateTime.now(),
+                  );
+                  if (selectedDate != null) {
+                    controller.text =
+                        DateFormat('yyyy-MM-dd').format(selectedDate);
+                  }
+                }
+              : null,
+          keyboardType: isEmail
+              ? TextInputType.emailAddress
+              : isNumeric
+                  ? TextInputType.number
+                  : TextInputType.text,
+          textInputAction: TextInputAction.next,
+          decoration: InputDecoration(
+            labelText: label,
+            hintText: hint,
+            prefixIcon: Icon(icon),
+            suffixIcon: isPassword
+                ? IconButton(
+                    icon: Icon(obsText ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () {
+                      setState(() {
+                        obsText = !obsText;
+                      });
+                    },
+                  )
+                : null,
+            filled: true,
+            fillColor: themeProvider.isDarkMode
+                ? Colors.grey.shade800
+                : Colors.grey.shade200,
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(
+                  color: themeProvider.isDarkMode
+                      ? Colors.blueGrey.shade200
+                      : Colors.blueGrey.shade400),
+              borderRadius: BorderRadius.circular(10.0),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderSide: const BorderSide(color: Colors.red),
+              borderRadius: BorderRadius.circular(10.0),
+            ),
+            border: OutlineInputBorder(
+              borderSide: BorderSide(
+                  color:
+                      themeProvider.isDarkMode ? Colors.white : Colors.black),
+              borderRadius: BorderRadius.circular(10.0),
+            ),
+          ),
+          inputFormatters: isNumeric
+              ? [FilteringTextInputFormatter.digitsOnly]
+              : null, // Sadece sayı girişine izin verir
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return validationMessage;
+            } else if (isPassword && value.length < 6) {
+              return 'Password must be at least 6 characters';
+            } else if (isEmail &&
+                !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+              return 'Please enter a valid email';
+            }
+            return null;
+          },
+        );
+      },
+    );
+  }
+}

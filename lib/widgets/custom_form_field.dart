@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:seaofsea/utils/theme_provider.dart';
 
 class CustomFormField extends StatelessWidget {
   final TextEditingController controller;
@@ -17,7 +18,7 @@ class CustomFormField extends StatelessWidget {
     required this.icon,
     required this.validationMessage,
     this.isPassword = false,
-    this.isEmail = false,
+    this.isEmail = false, required ThemeProvider themeProvider,
   }) : super(key: key);
 
   @override
