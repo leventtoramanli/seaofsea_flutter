@@ -1,30 +1,15 @@
 @echo off
+echo Değişiklikler ekleniyor...
+git add .
 
-:: Hedef dizine git
-cd /d "C:\flutter\app\sea\seaofsea"
+echo Commit mesajını yazın:
+set /p commitMessage="Commit Mesajı: "
 
-:: Değişiklikleri kontrol et
-if exist "C:\flutter\app\sea\seaofsea" (
-    echo Proje dizini bulundu.
-) else (
-    echo Proje dizini bulunamadı. Lütfen kontrol edin.
-    pause
-    exit /b
-)
+echo Commit işlemi yapılıyor...
+git commit -m "%commitMessage%"
 
-:: Git işlemleri
-:: Değişiklikleri commit et
-if exist .git (
-    echo Git dizini bulundu, işlemler başlıyor...
-    git add .
-    git commit -m "Automatic update via batch file"
-    git pull origin main
-    git push origin main
-) else (
-    echo Git deposu bulunamadı. Lütfen dizini kontrol edin.
-    pause
-    exit /b
-)
+echo Değişiklikler gönderiliyor (push)...
+git push
 
-:: İşlem tamamlandı
-echo Güncelleme işlemi tamamlandı.
+echo İşlem tamamlandı!
+pause
