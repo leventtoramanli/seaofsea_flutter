@@ -1,0 +1,310 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:seaofsea/utils/theme_data.dart';
+import 'package:seaofsea/utils/theme_provider.dart';
+import 'package:seaofsea/vievs/auth_page.dart';
+import 'package:seaofsea/vievs/register_page.dart';
+import 'package:seaofsea/vievs/terms.dart';
+import 'package:seaofsea/widgets/custom_button.dart';
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _formKey = GlobalKey<FormState>();
+  bool _rememberMe = false;
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController surnameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+
+  bool isLoading = false;
+  @override
+  void dispose() {
+    nameController.dispose();
+    surnameController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  void _showEmailVerificationDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Registration Successful'),
+          content: const Text(
+              'Please verify your email address. A verification email has been sent to your email address.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Dialog'u kapat
+                Navigator.pushReplacementNamed(context, '/');
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
+    final List<Map<String, dynamic>> fields = [
+      {
+        'controller': emailController,
+        'label': 'Email',
+        'hint': 'Enter your email',
+        'icon': const Icon(Icons.email),
+        'validationMessage': 'Please enter a valid email',
+        'isEmail': true,
+      },
+      {
+        'controller': passwordController,
+        'label': 'Password',
+        'hint': 'Enter your password',
+        'icon': const Icon(Icons.lock),
+        'validationMessage': 'Password must be at least 6 characters',
+        'isPassword': true,
+      },
+    ];
+
+    return Scaffold(
+      body: Center(
+        child: SingleChildScrollView(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400.0),
+            padding: const EdgeInsets.all(16.0),
+            margin: const EdgeInsets.all(16.0),
+            decoration: themeProvider.isDarkMode
+                ? getDarkBoxDecoration()
+                : getLightBoxDecoration(),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12.0),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black54,
+                              blurRadius: 12,
+                              offset: Offset(0, 0),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12.0),
+                          clipBehavior: Clip.antiAlias,
+                          child: const Image(
+                            image: AssetImage('assets/logo.png'),
+                            height: 150,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16.0),
+                    const Center(
+                      child: Text(
+                        'Welcome Back!',
+                        style: TextStyle(
+                            fontSize: 24.0, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 16.0),
+                    ListView.builder(
+                      itemCount: fields.length,
+                      shrinkWrap: true,
+                      itemBuilder: (context, index) {
+                        final field = fields[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: formTField(
+                            field['controller'],
+                            themeProvider,
+                            field['label'],
+                            field['hint'],
+                            field['icon'],
+                            field['validationMessage'],
+                            isPassword: field['isPassword'] ?? false,
+                            isEmail: field['isEmail'] ?? false,
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12.0),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: CheckboxListTile(
+                            controlAffinity: ListTileControlAffinity.leading,
+                            value: _rememberMe,
+                            onChanged: (value) {
+                              setState(() {
+                                _rememberMe = value ?? false;
+                              });
+                            },
+                            title: const Text(
+                              'Remember me',
+                              style: TextStyle(fontSize: 14.0),
+                            ),
+                            subtitle: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const Terms(),
+                                  ),
+                                );
+                              },
+                              child: const Text(
+                                'Read Terms & Conditions',
+                                style: TextStyle(
+                                  fontSize: 14.0,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        CustomButton(
+                          label: 'Login',
+                          onPressed: () {},
+                          icon: Icons.login,
+                          isLoading: false,
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        CustomButton(
+                          label: 'Sign In Anonymously',
+                          onPressed: () {},
+                          icon: Icons.theater_comedy,
+                          backgroundColor: Colors.amber.shade400,
+                          textColor: Colors.black,
+                        ),
+                        const SizedBox(height: 12.0),
+                        CustomButton(
+                          label: 'Sign In with Google',
+                          onPressed: () {},
+                          icon: Icons.g_mobiledata,
+                          backgroundColor: Colors.red.shade400,
+                          textColor: Colors.white,
+                        ),
+                        const SizedBox(height: 12.0),
+                        CustomButton(
+                          label: 'Sign Up',
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    const AuthPage(mode: AuthMode.register),
+                              ),
+                            );
+
+                            /*Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const RegisterPage(),
+                              ),
+                            );*/
+                          },
+                          icon: Icons.app_registration,
+                          backgroundColor: Colors.green.shade400,
+                          textColor: Colors.white,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget formTField(
+      TextEditingController controller,
+      ThemeProvider themeProvider,
+      String label,
+      String hint,
+      Icon icon,
+      String turner,
+      {bool isPassword = false,
+      bool isEmail = false}) {
+    bool obsText = isPassword;
+
+    return StatefulBuilder(builder: (context, setState) {
+      return TextFormField(
+        controller: controller,
+        obscureText: obsText,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          prefixIcon: icon,
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(obsText ? Icons.visibility : Icons.visibility_off),
+                  onPressed: () {
+                    setState(() {
+                      obsText = !obsText;
+                    });
+                  },
+                )
+              : null,
+          filled: true,
+          fillColor: themeProvider.isDarkMode
+              ? Colors.grey.shade800
+              : Colors.grey.shade200,
+          enabledBorder: OutlineInputBorder(
+            borderSide: BorderSide(
+                color: themeProvider.isDarkMode
+                    ? Colors.blueGrey.shade200
+                    : Colors.blueGrey.shade400),
+            borderRadius: BorderRadius.circular(10.0),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderSide: const BorderSide(color: Colors.red),
+            borderRadius: BorderRadius.circular(10.0),
+          ),
+          border: OutlineInputBorder(
+            borderSide: BorderSide(
+                color: themeProvider.isDarkMode ? Colors.white : Colors.black),
+            borderRadius: BorderRadius.circular(10.0),
+          ),
+        ),
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return turner;
+          } else if (isPassword && value.length < 6) {
+            return 'Password must be at least 6 characters';
+          } else if (isEmail &&
+              !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+            return 'Please enter a valid email';
+          }
+          return null;
+        },
+      );
+    });
+  }
+}
