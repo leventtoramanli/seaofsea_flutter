@@ -57,7 +57,7 @@ class MmsApp extends StatelessWidget {
                   sigmaY: colorBlindnessProvider.blurLevel.clamp(0.0, 5.0),
                 ),
                 child: Container(
-                  color: Colors.black.withOpacity(0.1), // Hafif bir renk
+                  color: Colors.black, // Hafif bir renk
                 ),
               ),
             ),

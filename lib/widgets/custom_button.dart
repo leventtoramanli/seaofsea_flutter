@@ -53,11 +53,13 @@ class CustomButton extends StatelessWidget {
                 if (icon != null && !iconOnRight) // Simge soldaysa
                   Icon(icon, size: 20.0, color: textColor ?? theme.colorScheme.onPrimary),
                 if (icon != null && !iconOnRight) const SizedBox(width: 8.0), // Simge ve yazı arası boşluk
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: textColor ?? theme.colorScheme.onPrimary,
-                    fontWeight: FontWeight.w600, // Hafif kalın yazı
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: textColor ?? theme.colorScheme.onPrimary,
+                      fontWeight: FontWeight.w600, // Hafif kalın yazı
+                    ),
                   ),
                 ),
                 if (icon != null && iconOnRight) const SizedBox(width: 8.0), // Yazı ve simge arası boşluk

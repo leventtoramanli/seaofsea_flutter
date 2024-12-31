@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/quotes.dart';
+import 'package:seaofsea/utils/secure_storage.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/vievs/auth_page.dart';
@@ -19,20 +22,17 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   bool _rememberMe = false;
-  final TextEditingController nameController = TextEditingController();
-  final TextEditingController surnameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
   bool isLoading = false;
+  final SecureStorage secureStorage = SecureStorage();
   final randomQuote = Quotes.getRandomQuote();
 
   bool wideScreen = false;
   double exWidth = 0.0;
   @override
   void dispose() {
-    nameController.dispose();
-    surnameController.dispose();
     emailController.dispose();
     passwordController.dispose();
     super.dispose();
@@ -47,6 +47,7 @@ class _LoginPageState extends State<LoginPage> {
           content: const Text(
               'Please verify your email address. A verification email has been sent to your email address.'),
           actions: [
+            TextButton(onPressed: () {}, child: Text('Send Again')),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Dialog'u kapat
@@ -58,6 +59,63 @@ class _LoginPageState extends State<LoginPage> {
         );
       },
     );
+  }
+
+  Future<void> _handleLogin() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        isLoading = true;
+      });
+      try {
+        final apiManager = Provider.of<ApiManager>(context, listen: false);
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final response = await apiManager.loginUser(context, {
+          'email': emailController.text,
+          'password': passwordController.text,
+        });
+
+        if (response['success']) {
+          final token = response['data']['token'];
+          final isVerified = response['data']['is_verified'];
+          final role = response['data']['role'];
+
+          await secureStorage.writeSecureData('token', token);
+          authProvider.login(token);
+
+          if (!isVerified) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    'Logged in as an anonymous user. Please verify your email for full access.'),
+              ),
+            );
+          }
+
+          // Role bazlı yönlendirme
+          if (role == 'admin') {
+            Navigator.pushReplacementNamed(context, '/adminDashboard');
+          } else {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(response['message'] ?? 'Login failed'),
+            ),
+          );
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login failed. Please try again.'),
+          ),
+        );
+      } finally {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -151,6 +209,7 @@ class _LoginPageState extends State<LoginPage> {
                   ListView.builder(
                     itemCount: fields.length,
                     shrinkWrap: true,
+                    //physics: const NeverScrollableScrollPhysics(),
                     itemBuilder: (context, index) {
                       final field = fields[index];
                       return Padding(
@@ -184,15 +243,17 @@ class _LoginPageState extends State<LoginPage> {
                                 });
                               },
                             ),
-                            GestureDetector(
-                              onTap: () {
-                                setState(() {
-                                  _rememberMe = !_rememberMe;
-                                });
-                              },
-                              child: const Text(
-                                'Remember me',
-                                style: TextStyle(fontSize: 14.0),
+                            Flexible(
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _rememberMe = !_rememberMe;
+                                  });
+                                },
+                                child: const Text(
+                                  'Remember me',
+                                  style: TextStyle(fontSize: 14.0),
+                                ),
                               ),
                             ),
                           ],
@@ -212,39 +273,43 @@ class _LoginPageState extends State<LoginPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const Terms(),
+                      Flexible(
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const Terms(),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            'Terms & Conditions',
+                            style: TextStyle(
+                              fontSize: 14.0,
+                              color: Colors.blue,
+                              decoration: TextDecoration.underline,
                             ),
-                          );
-                        },
-                        child: const Text(
-                          'Terms & Conditions',
-                          style: TextStyle(
-                            fontSize: 14.0,
-                            color: Colors.blue,
-                            decoration: TextDecoration.underline,
                           ),
                         ),
                       ),
-                      InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const RegisterPage(),
+                      Flexible(
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const RegisterPage(),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            'Forgot Password?',
+                            style: TextStyle(
+                              fontSize: 14.0,
+                              color: Colors.blue,
+                              decoration: TextDecoration.underline,
                             ),
-                          );
-                        },
-                        child: const Text(
-                          'Forgot Password?',
-                          style: TextStyle(
-                            fontSize: 14.0,
-                            color: Colors.blue,
-                            decoration: TextDecoration.underline,
                           ),
                         ),
                       ),
@@ -256,7 +321,38 @@ class _LoginPageState extends State<LoginPage> {
                     children: [
                       CustomButton(
                         label: 'Sign In Anonymously',
-                        onPressed: () {},
+                        onPressed: () async {
+                          final apiManager =
+                              Provider.of<ApiManager>(context, listen: false);
+                          final authProvider =
+                              Provider.of<AuthProvider>(context, listen: false);
+
+                          try {
+                            final response = await apiManager
+                                .post(context, '/anonymous-login', {});
+                            if (response['success']) {
+                              final token = response['data']['token'];
+                              await secureStorage.writeSecureData(
+                                  'token', token);
+                              authProvider.login(token);
+                              Navigator.pushReplacementNamed(context, '/home');
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(response['message'] ??
+                                      'Anonymous login failed'),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'An error occurred. Please try again.'),
+                              ),
+                            );
+                          }
+                        },
                         icon: Icons.theater_comedy,
                         backgroundColor: Colors.amber.shade400,
                         textColor: Colors.black,
@@ -321,17 +417,13 @@ class _LoginPageState extends State<LoginPage> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12.0),
           clipBehavior: Clip.antiAlias,
-          child: FadeInImage.assetNetwork(
-              placeholder: 'asssets/placeholder.png',
-              image: 'assets/logo.png',
-              height: imgSize,
-              width: imgSize,
-              fit: BoxFit.cover),
-
-          /*Image(
+          child: Image(
             image: const AssetImage('assets/logo.png'),
             height: imgSize,
-          ),*/
+            errorBuilder: (context, error, stackTrace) {
+              return const Text('Image not found');
+            },
+          ),
         ),
       ),
     );

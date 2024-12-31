@@ -8,8 +8,6 @@ import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/utils/theme_selector.dart';
 import 'package:seaofsea/vievs/terms.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
-import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -272,7 +270,6 @@ class _RegisterPageState extends State<RegisterPage> {
                                 print(response);
                                 if (response['success'] == true) {
                                   _showEmailVerificationDialog();
-                                  Navigator.pop(context);
                                 }
                               } catch (e) {
                                 print('Error: $e');
