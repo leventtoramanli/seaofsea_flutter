@@ -7,19 +7,19 @@ class RoleManager {
   static String getRoleDescription(String role) {
     switch (role) {
       case admin:
-        return 'Administrator';
+        return 'Admin';
       case moderator:
         return 'Moderator';
       case user:
         return 'Standard User';
       case anonymous:
       default:
-        return 'Anonymous User';
+        return 'Guest';
     }
   }
 
   static bool hasAccess(String role, String requiredRole) {
-    const roleHierarchy = [anonymous, user, moderator, admin];
-    return roleHierarchy.indexOf(role) >= roleHierarchy.indexOf(requiredRole);
-  }
+  const roleHierarchy = [anonymous, user, moderator, admin];
+  return roleHierarchy.indexOf(role) >= roleHierarchy.indexOf(requiredRole);
+}
 }

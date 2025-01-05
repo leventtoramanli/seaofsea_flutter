@@ -3,144 +3,181 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 class ApiManager {
+  final String? token;
   final String baseUrl;
   final String baseAddress;
 
-  ApiManager({
-    required this.baseUrl,
-    required this.baseAddress,
+  ApiManager(
+    this.token, {
+    this.baseUrl = 'http://localhost',
+    this.baseAddress = '/public/api.php',
   });
 
   /// Genel bir POST isteği
   Future<dynamic> post(
       BuildContext context, String endpoint, Map<String, dynamic> body) async {
-    return _makeRequest(context, 'POST', endpoint, body: body);
+    final fullPath = '$baseUrl$baseAddress?endpoint=$endpoint';
+    return _makeRequest(context, 'POST', fullPath, body: body);
   }
 
   /// Genel bir GET isteği
   Future<dynamic> get(BuildContext context, String endpoint,
       {Map<String, dynamic>? queryParams}) async {
-    return _makeRequest(context, 'GET', endpoint, queryParams: queryParams);
-  }
-
-  /// Genel bir PUT isteği
-  Future<dynamic> put(
-      BuildContext context, String endpoint, Map<String, dynamic> body) async {
-    return _makeRequest(context, 'PUT', endpoint, body: body);
-  }
-
-  /// Genel bir DELETE isteği
-  Future<dynamic> delete(BuildContext context, String endpoint) async {
-    return _makeRequest(context, 'DELETE', endpoint);
-  }
-
-  /// Hata ve başarı mesajlarını gösteren metot
-  void showSnackbar(BuildContext context, String message,
-      {bool isSuccess = true}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isSuccess ? Icons.check_circle : Icons.error,
-              color: isSuccess ? Colors.green : Colors.red,
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        showCloseIcon: true,
-        backgroundColor:
-            isSuccess ? Colors.green.shade100 : Colors.red.shade100,
-      ),
-    );
+    final fullPath = '$baseUrl$baseAddress?endpoint=$endpoint';
+    return _makeRequest(context, 'GET', fullPath, queryParams: queryParams);
   }
 
   /// Özel işlemler için soyutlama
   Future<dynamic> _makeRequest(
     BuildContext context,
     String method,
-    String endpoint, {
+    String url, {
     Map<String, dynamic>? body,
     Map<String, dynamic>? queryParams,
   }) async {
-    final url =
-        Uri.https(baseUrl.replaceFirst('https://', ''), endpoint, queryParams);
+    final uri = Uri.parse(url);
     final headers = {'Content-Type': 'application/json'};
     late http.Response response;
 
     try {
-      // HTTP isteği yap
       switch (method) {
         case 'POST':
           response =
-              await http.post(url, headers: headers, body: jsonEncode(body));
-          break;
-        case 'PUT':
-          response =
-              await http.put(url, headers: headers, body: jsonEncode(body));
-          break;
-        case 'DELETE':
-          response =
-              await http.delete(url, headers: headers, body: jsonEncode(body));
+              await http.post(uri, headers: headers, body: jsonEncode(body));
           break;
         case 'GET':
-        default:
-          response = await http.get(url, headers: headers);
+          response = await http.get(uri, headers: headers);
           break;
+        default:
+          throw Exception('Unsupported HTTP method: $method');
       }
-
-      // HTTP yanıtını işle
-      return _handleResponse(context, response);
+      return _handleResponse(context, response); // Yanıt işleme burada yapılır
     } catch (e) {
-      showSnackbar(context, 'Request failed: $e', isSuccess: false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Request failed: $e'), backgroundColor: Colors.red),
+      );
       throw Exception('Request failed: $e');
     }
   }
 
   /// Yanıtı işleyen metot
   dynamic _handleResponse(BuildContext context, http.Response response) {
-    if (response.statusCode >= 200 && response.statusCode < 300) {
+    try {
+      // HTTP yanıtın gövdesini çözümle
       final responseBody = jsonDecode(response.body);
+      print('Response body: $responseBody');
 
-      if (responseBody['success'] == true) {
-        showSnackbar(context, responseBody['message'] ?? 'Operation successful',
-            isSuccess: true);
+      final success = responseBody['success'] ?? false;
+      final message = responseBody['message'] ?? "No message provided";
+
+      if (success) {
+        // Başarılı yanıt için Snackbar veya diğer işlemler
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(message,
+                  style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.green),
+        );
         return responseBody;
       } else {
-        final errors = responseBody['errors'] ?? ['Unknown error'];
-        showSnackbar(context, errors.join('\n'), isSuccess: false);
+        // Başarısız yanıt için hata mesajını Snackbar'da göster
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(message,
+                  style: TextStyle(
+                      color: Colors.grey.shade100,
+                      fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red),
+        );
         return responseBody;
       }
-    } else {
-      showSnackbar(context,
-          'HTTP Error ${response.statusCode}: ${response.reasonPhrase}',
-          isSuccess: false);
-      throw Exception('HTTP Error ${response.statusCode}: ${response.body}');
+    } catch (e) {
+      // JSON hatası veya beklenmedik durumlarda hata yakala
+      final errorMessage = "An error occurred: ${e.toString()}";
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(
+              errorMessage,
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: Colors.red),
+      );
+      throw Exception(errorMessage);
     }
   }
 
-  /// CRUD ve diğer işlem bazlı metotlar
-  Future<dynamic> createUser(
-      BuildContext context, Map<String, dynamic> userData) async {
-    return post(context, '$baseAddress/register.php', userData);
-  }
-
+  /// Kullanıcı Girişi
   Future<dynamic> loginUser(
-      BuildContext context, Map<String, dynamic> loginData) async {
-    return post(context, '$baseAddress/login.php', loginData);
+    BuildContext context,
+    Map<String, dynamic> userData,
+  ) async {
+    return post(context, 'login', userData);
   }
 
-  Future<dynamic> updateUser(BuildContext context, String userId,
-      Map<String, dynamic> userData) async {
-    return put(context, '$baseAddress/users/$userId', userData);
+  /// Kullanıcı Kayıt
+  Future<dynamic> createUser(
+    BuildContext context,
+    Map<String, dynamic> userData,
+  ) async {
+    return post(context, 'register', userData);
   }
 
-  Future<dynamic> getUser(BuildContext context, String userId) async {
-    return get(context, '$baseAddress/users/$userId');
+  /// Şifre Sıfırlama İsteği
+  Future<dynamic> resetPasswordRequest(
+    BuildContext context,
+    String email,
+  ) async {
+    return post(context, 'reset_password_request', {'email': email});
   }
 
-  Future<dynamic> deleteUser(BuildContext context, String userId) async {
-    return delete(context, '$baseAddress/users/$userId');
+  /// Şifre Sıfırlama
+  Future<dynamic> resetPassword(
+    BuildContext context,
+    String email,
+    String newPassword,
+    String confirmPassword,
+  ) async {
+    return post(context, 'reset_password', {
+      'email': email,
+      'new_password': newPassword,
+      'confirm_password': confirmPassword,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getUsersWithRoles(
+      BuildContext context) async {
+    final response = await get(context, 'get_users_with_roles');
+    if (response['success']) {
+      return List<Map<String, dynamic>>.from(response['data']);
+    } else {
+      throw Exception(
+          response['message'] ?? 'Failed to retrieve users with roles.');
+    }
+  }
+
+  /// Hata ve başarı mesajlarını gösteren metot
+  void showSnackbar(BuildContext context, String message,
+      {bool isSuccess = true}) {
+    if (message.isEmpty) {
+      message = "An unknown error occurred."; // Varsayılan mesaj
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: isSuccess
+              ? TextStyle(
+                  color: Colors.grey.shade500, fontWeight: FontWeight.bold)
+              : const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: isSuccess ? Colors.green : Colors.red,
+      ),
+    );
   }
 }

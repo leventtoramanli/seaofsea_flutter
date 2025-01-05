@@ -8,7 +8,7 @@ class CustomFormField extends StatelessWidget {
   final ThemeProvider themeProvider;
   final String label;
   final String hint;
-  final IconData icon;
+  final Icon icon;
   final String validationMessage;
   final bool isPassword;
   final bool isEmail;
@@ -64,7 +64,7 @@ class CustomFormField extends StatelessWidget {
           decoration: InputDecoration(
             labelText: label,
             hintText: hint,
-            prefixIcon: Icon(icon),
+            prefixIcon: icon,
             suffixIcon: isPassword
                 ? IconButton(
                     icon: Icon(obsText ? Icons.visibility : Icons.visibility_off),

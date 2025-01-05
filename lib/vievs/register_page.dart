@@ -9,6 +9,7 @@ import 'package:seaofsea/utils/theme_selector.dart';
 import 'package:seaofsea/vievs/terms.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';
+import 'package:seaofsea/widgets/ins_image.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -24,9 +25,9 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController surnameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final randomQuote = Quotes.getRandomQuote();
 
   bool isLoading = false;
+  final randomQuote = Quotes.getRandomQuote();
 
   bool wideScreen = false;
   double exWidth = 0.0;
@@ -61,6 +62,61 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
+  Future<void> _handleRegister() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      isLoading = true;
+    });
+
+    final apiManager = Provider.of<ApiManager>(context, listen: false);
+
+    if (!_termsAccepted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Terms Not Accepted'),
+          content: const Text(
+              'You must accept the Terms and Conditions to register.'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      setState(() {
+        isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final response = await apiManager.createUser(
+        context,
+        {
+          'name': nameController.text,
+          'surname': surnameController.text,
+          'email': emailController.text,
+          'password': passwordController.text,
+        },
+      );
+
+      if (response['success']) {
+        _showEmailVerificationDialog();
+      }
+    } catch (e) {
+      debugPrint('Error during registration: $e');
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -77,21 +133,21 @@ class _RegisterPageState extends State<RegisterPage> {
         'controller': nameController,
         'label': 'Name',
         'hint': 'Enter your name',
-        'icon': Icons.person,
+        'icon': const Icon(Icons.person),
         'validationMessage': 'Please enter your name',
       },
       {
         'controller': surnameController,
         'label': 'Surname',
         'hint': 'Enter your surname',
-        'icon': Icons.person,
+        'icon': const Icon(Icons.person),
         'validationMessage': 'Please enter your surname',
       },
       {
         'controller': emailController,
         'label': 'Email',
         'hint': 'Enter your email',
-        'icon': Icons.email,
+        'icon': const Icon(Icons.email),
         'validationMessage': 'Please enter a valid email',
         'isEmail': true,
       },
@@ -99,7 +155,7 @@ class _RegisterPageState extends State<RegisterPage> {
         'controller': passwordController,
         'label': 'Password',
         'hint': 'Enter your password',
-        'icon': Icons.lock,
+        'icon': const Icon(Icons.lock),
         'validationMessage': 'Password must be at least 6 characters',
         'isPassword': true,
       },
@@ -120,7 +176,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      insImage(),
+                      InsImage(wideScreen: wideScreen),
                       const SizedBox(height: 16.0),
                       Text(
                         randomQuote,
@@ -159,7 +215,7 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (!wideScreen) insImage(),
+                  if (!wideScreen) InsImage(wideScreen: wideScreen),
                   const SizedBox(height: 16.0),
                   const Center(
                     child: Text(
@@ -240,46 +296,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           label: 'Register',
                           backgroundColor: Colors.green,
                           textColor: Colors.white,
-                          onPressed: () async {
-                            if (_formKey.currentState!.validate()) {
-                              setState(() {
-                                isLoading = true;
-                              });
-                              final api = Provider.of<ApiManager>(context,
-                                  listen: false);
-                              if (!_termsAccepted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Please accept the terms.'),
-                                  ),
-                                );
-                                isLoading = false;
-                                return;
-                              }
-
-                              try {
-                                final response = await api.createUser(
-                                  context,
-                                  {
-                                    'name': nameController.text,
-                                    'surname': surnameController.text,
-                                    'email': emailController.text,
-                                    'password': passwordController.text,
-                                  },
-                                );
-                                print(response);
-                                if (response['success'] == true) {
-                                  _showEmailVerificationDialog();
-                                }
-                              } catch (e) {
-                                print('Error: $e');
-                              } finally {
-                                setState(() {
-                                  isLoading = false;
-                                });
-                              }
-                            }
-                          },
+                          onPressed: _handleRegister,
                         ),
                       ),
                     ],
@@ -287,33 +304,6 @@ class _RegisterPageState extends State<RegisterPage> {
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Center insImage() {
-    double imgSize = 150;
-    wideScreen ? imgSize = 300 : imgSize = 150;
-    return Center(
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12.0),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black54,
-              blurRadius: 12,
-              offset: Offset(0, 0),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12.0),
-          clipBehavior: Clip.antiAlias,
-          child: Image(
-            image: const AssetImage('assets/logo.png'),
-            height: imgSize,
           ),
         ),
       ),

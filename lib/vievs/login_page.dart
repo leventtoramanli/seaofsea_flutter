@@ -11,6 +11,8 @@ import 'package:seaofsea/vievs/auth_page.dart';
 import 'package:seaofsea/vievs/register_page.dart';
 import 'package:seaofsea/vievs/terms.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
+import 'package:seaofsea/widgets/custom_form_field.dart';
+import 'package:seaofsea/widgets/ins_image.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -62,54 +64,56 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleLogin() async {
+    print('Login handle started');
+    
     if (_formKey.currentState!.validate()) {
       setState(() {
         isLoading = true;
       });
+
       try {
         final apiManager = Provider.of<ApiManager>(context, listen: false);
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
         final response = await apiManager.loginUser(context, {
           'email': emailController.text,
           'password': passwordController.text,
         });
 
+        print('Response after API Manager: $response');
+
         if (response['success']) {
           final token = response['data']['token'];
-          final isVerified = response['data']['is_verified'];
           final role = response['data']['role'];
+          final isVerified = response['data']['is_verified'];
+          print('If Success: $token');
 
-          await secureStorage.writeSecureData('token', token);
-          authProvider.login(token);
-
-          if (!isVerified) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                    'Logged in as an anonymous user. Please verify your email for full access.'),
-              ),
-            );
+          // Token doğruluğunu kontrol et
+          if (token.isEmpty || !token.contains('.')) {
+            print('Invalid token format.');
+            throw Exception('Invalid token format.');
           }
+          try {
+            await secureStorage.writeSecureData('authToken', token);
+            await secureStorage.writeSecureData('role', role);
+          } catch (e) {
+            print('Error saving token: $e');
+          }
+          
 
-          // Role bazlı yönlendirme
-          if (role == 'admin') {
-            Navigator.pushReplacementNamed(context, '/adminDashboard');
+          
+
+          authProvider.login(token, role);
+
+          if (isVerified != 1) {
+            _showEmailVerificationDialog();
           } else {
-            Navigator.pushReplacementNamed(context, '/home');
+            Navigator.pushReplacementNamed(
+                context, role == 'admin' ? '/admin' : '/home');
           }
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(response['message'] ?? 'Login failed'),
-            ),
-          );
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Login failed. Please try again.'),
-          ),
-        );
+        debugPrint('Is it aLogin error: $e');
       } finally {
         setState(() {
           isLoading = false;
@@ -157,7 +161,7 @@ class _LoginPageState extends State<LoginPage> {
                   Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      insImage(),
+                      InsImage(wideScreen: wideScreen),
                       const SizedBox(height: 16.0),
                       Text(
                         randomQuote,
@@ -196,7 +200,7 @@ class _LoginPageState extends State<LoginPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (!wideScreen) insImage(),
+                  if (!wideScreen) InsImage(wideScreen: wideScreen),
                   const SizedBox(height: 16.0),
                   const Center(
                     child: Text(
@@ -214,13 +218,13 @@ class _LoginPageState extends State<LoginPage> {
                       final field = fields[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 16.0),
-                        child: formTField(
-                          field['controller'],
-                          themeProvider,
-                          field['label'],
-                          field['hint'],
-                          field['icon'],
-                          field['validationMessage'],
+                        child: CustomFormField(
+                          controller: field['controller'],
+                          themeProvider: themeProvider,
+                          label: field['label'],
+                          hint: field['hint'],
+                          icon: field['icon'],
+                          validationMessage: field['validationMessage'],
                           isPassword: field['isPassword'] ?? false,
                           isEmail: field['isEmail'] ?? false,
                         ),
@@ -262,10 +266,10 @@ class _LoginPageState extends State<LoginPage> {
                       CustomButton(
                         label: 'Login',
                         onPressed: () {
-                          // Login işlemi
+                          _handleLogin();
                         },
                         icon: Icons.login,
-                        isLoading: false,
+                        isLoading: isLoading,
                       ),
                     ],
                   ),
@@ -334,7 +338,7 @@ class _LoginPageState extends State<LoginPage> {
                               final token = response['data']['token'];
                               await secureStorage.writeSecureData(
                                   'token', token);
-                              authProvider.login(token);
+                              authProvider.login(token!, 'anonymous');
                               Navigator.pushReplacementNamed(context, '/home');
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -397,100 +401,5 @@ class _LoginPageState extends State<LoginPage> {
         ),
       ),
     );
-  }
-
-  Center insImage() {
-    double imgSize = 150;
-    wideScreen ? imgSize = 300 : imgSize = 150;
-    return Center(
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12.0),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black54,
-              blurRadius: 12,
-              offset: Offset(0, 0),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12.0),
-          clipBehavior: Clip.antiAlias,
-          child: Image(
-            image: const AssetImage('assets/logo.png'),
-            height: imgSize,
-            errorBuilder: (context, error, stackTrace) {
-              return const Text('Image not found');
-            },
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget formTField(
-      TextEditingController controller,
-      ThemeProvider themeProvider,
-      String label,
-      String hint,
-      Icon icon,
-      String turner,
-      {bool isPassword = false,
-      bool isEmail = false}) {
-    bool obsText = isPassword;
-
-    return StatefulBuilder(builder: (context, setState) {
-      return TextFormField(
-        controller: controller,
-        obscureText: obsText,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          prefixIcon: icon,
-          suffixIcon: isPassword
-              ? IconButton(
-                  icon: Icon(obsText ? Icons.visibility : Icons.visibility_off),
-                  onPressed: () {
-                    setState(() {
-                      obsText = !obsText;
-                    });
-                  },
-                )
-              : null,
-          filled: true,
-          fillColor: themeProvider.isDarkMode
-              ? Colors.grey.shade800
-              : Colors.grey.shade200,
-          enabledBorder: OutlineInputBorder(
-            borderSide: BorderSide(
-                color: themeProvider.isDarkMode
-                    ? Colors.blueGrey.shade200
-                    : Colors.blueGrey.shade400),
-            borderRadius: BorderRadius.circular(10.0),
-          ),
-          errorBorder: OutlineInputBorder(
-            borderSide: const BorderSide(color: Colors.red),
-            borderRadius: BorderRadius.circular(10.0),
-          ),
-          border: OutlineInputBorder(
-            borderSide: BorderSide(
-                color: themeProvider.isDarkMode ? Colors.white : Colors.black),
-            borderRadius: BorderRadius.circular(10.0),
-          ),
-        ),
-        validator: (value) {
-          if (value == null || value.isEmpty) {
-            return turner;
-          } else if (isPassword && value.length < 6) {
-            return 'Password must be at least 6 characters';
-          } else if (isEmail &&
-              !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-            return 'Please enter a valid email';
-          }
-          return null;
-        },
-      );
-    });
   }
 }
