@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:seaofsea/utils/secure_storage.dart';
 
 class ApiManager {
   final String? token;
@@ -16,8 +17,27 @@ class ApiManager {
   /// Genel bir POST isteği
   Future<dynamic> post(
       BuildContext context, String endpoint, Map<String, dynamic> body) async {
-    final fullPath = '$baseUrl$baseAddress?endpoint=$endpoint';
-    return _makeRequest(context, 'POST', fullPath, body: body);
+        print('Post istegi: $endpoint');
+    final secureStorage = SecureStorage(); // SecureStorage tanımlaması
+    final authToken =
+        await secureStorage.readSecureData('authToken'); // Token'ı oku
+    print('Total address: $baseUrl$baseAddress?$endpoint');
+    final response = await http.post(
+      Uri.parse('$baseUrl$baseAddress?endpoint=$endpoint'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $authToken',
+      },
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode == 401) {
+      // Token süresi doldu, yenileme işlemi
+      await refreshToken(context); // Token yenile
+      return post(context, endpoint, body); // Yeniden dene
+    }
+
+    return jsonDecode(response.body);
   }
 
   /// Genel bir GET isteği
@@ -156,6 +176,25 @@ class ApiManager {
     } else {
       throw Exception(
           response['message'] ?? 'Failed to retrieve users with roles.');
+    }
+  }
+
+  Future<void> refreshToken(BuildContext context) async {
+    final secureStorage = SecureStorage();
+    final refreshToken = await secureStorage.readSecureData('refreshToken');
+
+    if (refreshToken == null) {
+      throw Exception('No refresh token available.');
+    }
+
+    final response =
+        await post(context, 'refresh_token', {'refresh_token': refreshToken});
+
+    if (response['success']) {
+      final newAccessToken = response['data']['access_token'];
+      await secureStorage.writeSecureData('authToken', newAccessToken);
+    } else {
+      throw Exception(response['message']);
     }
   }
 
