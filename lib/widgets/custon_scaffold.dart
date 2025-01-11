@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/auth_provider.dart';
+import 'package:seaofsea/utils/menu_items_provider.dart';
 import 'package:seaofsea/utils/theme_selector.dart';
 
 class CustomScaffold extends StatelessWidget {
@@ -13,71 +13,69 @@ class CustomScaffold extends StatelessWidget {
     this.body,
   });
 
-  // Default liste (hem AppBar actions hem Drawer için kullanılacak)
-  List<Map<String, dynamic>> menuItems(BuildContext context) {
-    final AuthProvider authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    return [
-      {
-        'icon': Icons.home,
-        'label': 'Home',
-        'onTap': () => print('Home tapped'),
-      },
-      {
-        'icon': Icons.settings,
-        'label': 'Settings',
-        'onTap': () => print('Settings tapped'),
-      },
-      {
-        'icon': Icons.logout,
-        'label': 'Logout',
-        'onTap': () => authProvider.logout(context), // AuthProvider ile logout
-      },
-    ];
-  }
+  get index => null;
 
   @override
   Widget build(BuildContext context) {
+    final menuProvider = Provider.of<MenuItemsProvider>(context);
     final bool wideScreen = MediaQuery.of(context).size.width > 650;
     final bool tWideScreen = MediaQuery.of(context).size.width > 850;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(title ?? ''),
+        title: Row(
+          children: [
+            TextButton(
+              onPressed: () {
+                Navigator.pushReplacementNamed(context, '/home');
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8.0),
+                clipBehavior: Clip.antiAlias,
+                child: const Image(
+                  image: AssetImage('assets/logo256.png'),
+                  height: 40,
+                  width: 40,
+                ),
+              ),
+            ),
+            SizedBox(width: wideScreen ? 10 : 7),
+            Text(title ?? ''),
+          ],
+        ),
         actions: [
           if (wideScreen)
-            ...menuItems(context).expand((item) {
-              return [
-                if (tWideScreen)
-                  Row(
-                    children: [
-                      TextButton.icon(
-                        onPressed: item['onTap'],
-                        icon: Icon(item['icon'], color: Colors.white),
-                        label: Text(
-                          item['label'],
-                          style: const TextStyle(color: Colors.white),
+            ...menuProvider.getMenuItems(context).map((item) {
+              if (tWideScreen) {
+                return Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: item['onTap'],
+                      icon: Icon(item['icon'], color: Colors.white),
+                      label: Text(
+                        item['label'],
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    if (index != menuProvider.getMenuItems(context).length - 1)
+                      const Text(
+                        '|',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
                         ),
                       ),
-                      if (item != menuItems(context).last) // Son öğe hariç ayraç ekle
-                        const Text(
-                          '|',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                    ],
-                  )
-                else
-                  IconButton(
-                    icon: Icon(item['icon']),
-                    tooltip: item['label'],
-                    onPressed: item['onTap'],
-                  ),
-              ];
-            }),
+                  ],
+                );
+              } else {
+                return IconButton(
+                  icon: Icon(item['icon']),
+                  tooltip: item['label'],
+                  onPressed: item['onTap'],
+                );
+              }
+            }).toList(),
           const ThemeSelector(),
         ],
       ),
@@ -86,13 +84,22 @@ class CustomScaffold extends StatelessWidget {
               child: ListView(
                 children: [
                   const DrawerHeader(
-                    decoration: BoxDecoration(color: Colors.blue),
+                    decoration: BoxDecoration(
+                      color: Colors.blue,
+                      image: DecorationImage(
+                        image: AssetImage('assets/logo.png'),
+                        fit: BoxFit.fitWidth,
+                        colorFilter: ColorFilter.mode(Colors.black54,
+                            BlendMode.dstATop // Renk ve resim birleşimi
+                            ),
+                      ),
+                    ),
                     child: Text(
-                      'Menu',
+                      '',
                       style: TextStyle(color: Colors.white, fontSize: 24),
                     ),
                   ),
-                  ...menuItems(context).map((item) {
+                  ...menuProvider.getMenuItems(context).map((item) {
                     return ListTile(
                       leading: Icon(item['icon']),
                       title: Text(item['label']),

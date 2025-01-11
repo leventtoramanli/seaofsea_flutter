@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
-import 'package:seaofsea/widgets/custom_app_bar.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
 
 class HomePage extends StatefulWidget {

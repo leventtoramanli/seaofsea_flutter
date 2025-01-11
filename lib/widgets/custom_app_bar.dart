@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/theme_selector.dart';
 
 class MyAppBar extends AppBar {
