@@ -4,13 +4,12 @@ import 'package:seaofsea/utils/color_blindness_provider.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 
 class ThemeSelector extends StatelessWidget {
-  const ThemeSelector({super.key, required ThemeProvider themeProvider});
+  const ThemeSelector({super.key});
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final colorBlindnessProvider =
-        Provider.of<ColorBlindnessProvider>(context);
+    final colorBlindnessProvider = Provider.of<ColorBlindnessProvider>(context);
 
     return PopupMenuButton<String>(
       icon: Icon(
@@ -30,8 +29,26 @@ class ThemeSelector extends StatelessWidget {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(value: 'Light', child: Text('Light Theme')),
-        const PopupMenuItem(value: 'Dark', child: Text('Dark Theme')),
+        PopupMenuItem(
+            value: 'Light',
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Light Theme'),
+                if (!themeProvider.isDarkMode)
+                  const Icon(Icons.check, color: Colors.blue),
+              ],
+            )),
+        PopupMenuItem(
+            value: 'Dark',
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Dark Theme'),
+                if (themeProvider.isDarkMode)
+                  const Icon(Icons.check, color: Colors.blue),
+              ],
+            )),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: ColorBlindnessProvider.protanopia,
@@ -81,9 +98,9 @@ class ThemeSelector extends StatelessWidget {
             ],
           ),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'BlurLevel',
-          child: const Text('Set Blur Level'),
+          child: Text('Set Blur Level'),
         ),
         PopupMenuItem(
           value: 'EffectToggle',
@@ -95,7 +112,7 @@ class ThemeSelector extends StatelessWidget {
                 value: colorBlindnessProvider.isEffectOn,
                 onChanged: (value) {
                   colorBlindnessProvider.toggleEffect();
-                  Navigator.pop(context); // Menü kapatılır
+                  Navigator.pop(context);
                 },
               ),
             ],
@@ -105,8 +122,7 @@ class ThemeSelector extends StatelessWidget {
     );
   }
 
-  void _showBlurSlider(
-      BuildContext context, ColorBlindnessProvider provider) {
+  void _showBlurSlider(BuildContext context, ColorBlindnessProvider provider) {
     showDialog(
       context: context,
       builder: (context) {

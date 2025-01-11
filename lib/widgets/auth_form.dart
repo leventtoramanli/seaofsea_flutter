@@ -27,6 +27,7 @@ class AuthForm extends StatelessWidget {
           TextFormField(
             controller: emailController,
             decoration: const InputDecoration(labelText: 'Email'),
+            initialValue: 'leventtoramanli@gmail.com',
             keyboardType: TextInputType.emailAddress,
             validator: (value) {
               if (value == null || value.isEmpty) {
@@ -39,6 +40,7 @@ class AuthForm extends StatelessWidget {
           TextFormField(
             controller: passwordController,
             decoration: const InputDecoration(labelText: 'Password'),
+            initialValue: '145326326Ll',
             obscureText: true,
             validator: (value) {
               if (value == null || value.length < 6) {

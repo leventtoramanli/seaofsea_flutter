@@ -27,7 +27,7 @@ ThemeData lightTheme = ThemeData(
       borderRadius: BorderRadius.circular(10.0),
       borderSide: BorderSide(color: ColorScheme.fromSeed(seedColor: seedColor).primary),
     ),
-    labelStyle: TextStyle(color: seedColor),
+    labelStyle: const TextStyle(color: seedColor),
   ),
 );
 

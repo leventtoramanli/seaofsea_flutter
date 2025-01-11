@@ -5,8 +5,8 @@ import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/quotes.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
-import 'package:seaofsea/utils/theme_selector.dart';
 import 'package:seaofsea/vievs/terms.dart';
+import 'package:seaofsea/widgets/custom_app_bar.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';
 import 'package:seaofsea/widgets/ins_image.dart';
@@ -95,15 +95,13 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
     try {
-      final response = await apiManager.createUser(
-        context,
-        {
-          'name': nameController.text,
-          'surname': surnameController.text,
-          'email': emailController.text,
-          'password': passwordController.text,
-        },
-      );
+      final response = await apiManager
+          .request(context, endpoint: 'register', method: 'POST', body: {
+        'name': nameController.text,
+        'surname': surnameController.text,
+        'email': emailController.text,
+        'password': passwordController.text
+      });
 
       if (response['success']) {
         _showEmailVerificationDialog();
@@ -162,12 +160,7 @@ class _RegisterPageState extends State<RegisterPage> {
     ];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Register'),
-        actions: [
-          ThemeSelector(themeProvider: themeProvider),
-        ],
-      ),
+      appBar: MyAppBar(title: 'Register'),
       body: wideScreen
           ? Center(
               child: Row(

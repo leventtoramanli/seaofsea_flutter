@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:seaofsea/vievs/forgot_password.dart';
 import 'package:seaofsea/vievs/login_page.dart';
 import 'package:seaofsea/vievs/register_page.dart';
 
-enum AuthMode { login, register, none }
+enum AuthMode { login, register, forgotPassword, none }
 
 class AuthPage extends StatelessWidget {
   final AuthMode mode;
@@ -11,19 +12,19 @@ class AuthPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget content;
-
     switch (mode) {
       case AuthMode.login:
-        content = const LoginPage();
-        break;
+        return const LoginPage(); // Login sayfası
       case AuthMode.register:
-        content = const RegisterPage();
-        break;
+        return const RegisterPage(); // Register sayfası
+      case AuthMode.forgotPassword:
+        return const ForgotPassword();
       default:
-        content = const Center(child: Text('Invalid mode'));
+        return const Scaffold(
+          body: Center(
+            child: Text('Invalid mode!'),
+          ),
+        ); // Geçersiz bir durum
     }
-
-    return content;
   }
 }

@@ -8,7 +8,6 @@ import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/color_blindness_provider.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
-import 'package:seaofsea/utils/theme_selector.dart';
 import 'package:seaofsea/vievs/auth_page.dart';
 import 'package:seaofsea/vievs/home_page.dart';
 
@@ -38,8 +37,9 @@ class MmsApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final colorBlindnessProvider = Provider.of<ColorBlindnessProvider>(context);
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: true);
+    final colorBlindnessProvider =
+        Provider.of<ColorBlindnessProvider>(context, listen: false);
 
     return Directionality(
       textDirection: TextDirection.ltr, // Yazı yönü belirtildi
@@ -67,12 +67,13 @@ class MmsApp extends StatelessWidget {
                 sigmaY: colorBlindnessProvider.blurLevel.clamp(0.0, 5.0),
               ),
               child: Container(
-                color: Colors.black.withAlpha(10), // Hafif bir opaklık
+                color: Colors.black.withAlpha(10),
                 child: GestureDetector(
                   onTap: () {
                     // Kullanıcı bulanıklığı kapatabilir
                     colorBlindnessProvider.toggleEffect();
                   },
+                  behavior: HitTestBehavior.translucent,
                   child: const SizedBox.expand(), // Tüm alanı kapsar
                 ),
               ),
@@ -83,8 +84,6 @@ class MmsApp extends StatelessWidget {
   }
 }
 
-
-
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
 
@@ -94,23 +93,22 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
     final authProvider = Provider.of<AuthProvider>(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("SeaOfSea"),
-        centerTitle: true,
-        actions: [
-          ThemeSelector(themeProvider: themeProvider),
-        ],
-      ),
-      body: authProvider.isLoggedIn
+    return MaterialApp(
+      theme: lightTheme,
+      darkTheme: darkTheme,
+      themeMode: context.watch<ThemeProvider>().themeMode,
+      home: authProvider.isLoggedIn
           ? const HomePage()
-          : const AuthPage(
-              mode: AuthMode.login,
-            ),
+          : const AuthPage(mode: AuthMode.login),
     );
+  
   }
 }

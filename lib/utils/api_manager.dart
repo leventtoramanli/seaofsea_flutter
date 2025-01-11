@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
 
 class ApiManager {
@@ -14,53 +16,29 @@ class ApiManager {
     this.baseAddress = '/public/api.php',
   });
 
-  /// Genel bir POST isteği
-  Future<dynamic> post(
-      BuildContext context, String endpoint, Map<String, dynamic> body) async {
-        print('Post istegi: $endpoint');
-    final secureStorage = SecureStorage(); // SecureStorage tanımlaması
-    final authToken =
-        await secureStorage.readSecureData('authToken'); // Token'ı oku
-    print('Total address: $baseUrl$baseAddress?$endpoint');
-    final response = await http.post(
-      Uri.parse('$baseUrl$baseAddress?endpoint=$endpoint'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $authToken',
-      },
-      body: jsonEncode(body),
-    );
+  factory ApiManager.empty() => ApiManager(null);
 
-    if (response.statusCode == 401) {
-      // Token süresi doldu, yenileme işlemi
-      await refreshToken(context); // Token yenile
-      return post(context, endpoint, body); // Yeniden dene
-    }
-
-    return jsonDecode(response.body);
-  }
-
-  /// Genel bir GET isteği
-  Future<dynamic> get(BuildContext context, String endpoint,
-      {Map<String, dynamic>? queryParams}) async {
-    final fullPath = '$baseUrl$baseAddress?endpoint=$endpoint';
-    return _makeRequest(context, 'GET', fullPath, queryParams: queryParams);
-  }
-
-  /// Özel işlemler için soyutlama
-  Future<dynamic> _makeRequest(
-    BuildContext context,
-    String method,
-    String url, {
+  Future<dynamic> request(
+    BuildContext context, {
+    required String endpoint,
+    required String method,
     Map<String, dynamic>? body,
     Map<String, dynamic>? queryParams,
   }) async {
-    final uri = Uri.parse(url);
-    final headers = {'Content-Type': 'application/json'};
-    late http.Response response;
+    final secureStorage = SecureStorage();
+    final authToken = await secureStorage.readSecureData('authToken');
+    final uri = Uri.parse('$baseUrl$baseAddress?endpoint=$endpoint');
+
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $authToken',
+    };
 
     try {
-      switch (method) {
+      http.Response response;
+
+      // HTTP yöntemi seçimi
+      switch (method.toUpperCase()) {
         case 'POST':
           response =
               await http.post(uri, headers: headers, body: jsonEncode(body));
@@ -71,152 +49,119 @@ class ApiManager {
         default:
           throw Exception('Unsupported HTTP method: $method');
       }
-      return _handleResponse(context, response); // Yanıt işleme burada yapılır
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Request failed: $e'), backgroundColor: Colors.red),
-      );
-      throw Exception('Request failed: $e');
-    }
-  }
-
-  /// Yanıtı işleyen metot
-  dynamic _handleResponse(BuildContext context, http.Response response) {
-    try {
-      // HTTP yanıtın gövdesini çözümle
-      final responseBody = jsonDecode(response.body);
-      print('Response body: $responseBody');
-
-      final success = responseBody['success'] ?? false;
-      final message = responseBody['message'] ?? "No message provided";
-
-      if (success) {
-        // Başarılı yanıt için Snackbar veya diğer işlemler
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(message,
-                  style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.green),
-        );
-        return responseBody;
-      } else {
-        // Başarısız yanıt için hata mesajını Snackbar'da göster
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(message,
-                  style: TextStyle(
-                      color: Colors.grey.shade100,
-                      fontWeight: FontWeight.bold)),
-              backgroundColor: Colors.red),
-        );
-        return responseBody;
+      // Eğer yanıt 401 ise token yenilemeyi dene
+      if (response.statusCode == 401) {
+        // ignore: use_build_context_synchronously
+        final refreshSuccessful = await _refreshToken(context);
+        if (refreshSuccessful) {
+          // Yeni token ile isteği tekrar dene
+          return request(
+            // ignore: use_build_context_synchronously
+            context,
+            endpoint: endpoint,
+            method: method,
+            body: body,
+            queryParams: queryParams,
+          );
+        } else {
+          // Token yenileme başarısızsa oturumu kapat
+          final authProvider =
+              // ignore: use_build_context_synchronously
+              Provider.of<AuthProvider>(context, listen: false);
+          // ignore: use_build_context_synchronously
+          await authProvider.logout(context);
+          throw Exception('Session expired. Please log in again.');
+        }
       }
+
+      // ignore: use_build_context_synchronously
+      return _handleResponse(context, response); // Yanıtı işle
     } catch (e) {
-      // JSON hatası veya beklenmedik durumlarda hata yakala
-      final errorMessage = "An error occurred: ${e.toString()}";
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(
-              errorMessage,
-              style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            backgroundColor: Colors.red),
-      );
-      throw Exception(errorMessage);
+      // ignore: use_build_context_synchronously
+      _showSnackbar(context, 'Request failed: $e', isSuccess: false);
+      rethrow;
     }
   }
 
-  /// Kullanıcı Girişi
-  Future<dynamic> loginUser(
-    BuildContext context,
-    Map<String, dynamic> userData,
-  ) async {
-    return post(context, 'login', userData);
+  Future<dynamic> post(
+      BuildContext context, String endpoint, Map<String, dynamic> body) {
+    return request(context, endpoint: endpoint, method: 'POST', body: body);
   }
 
-  /// Kullanıcı Kayıt
-  Future<dynamic> createUser(
-    BuildContext context,
-    Map<String, dynamic> userData,
-  ) async {
-    return post(context, 'register', userData);
+  Future<dynamic> get(BuildContext context, String endpoint,
+      {Map<String, dynamic>? queryParams}) {
+    return request(context,
+        endpoint: endpoint, method: 'GET', queryParams: queryParams);
   }
 
-  /// Şifre Sıfırlama İsteği
-  Future<dynamic> resetPasswordRequest(
-    BuildContext context,
-    String email,
-  ) async {
-    return post(context, 'reset_password_request', {'email': email});
-  }
+  dynamic _handleResponse(BuildContext context, http.Response response) {
+    final responseBody = jsonDecode(response.body);
+    final success = responseBody['success'] ?? false;
+    final message = responseBody['message'] ?? 'No message provided';
 
-  /// Şifre Sıfırlama
-  Future<dynamic> resetPassword(
-    BuildContext context,
-    String email,
-    String newPassword,
-    String confirmPassword,
-  ) async {
-    return post(context, 'reset_password', {
-      'email': email,
-      'new_password': newPassword,
-      'confirm_password': confirmPassword,
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> getUsersWithRoles(
-      BuildContext context) async {
-    final response = await get(context, 'get_users_with_roles');
-    if (response['success']) {
-      return List<Map<String, dynamic>>.from(response['data']);
+    _showSnackbar(context, message, isSuccess: success);
+    if (success) {
+      return responseBody;
     } else {
-      throw Exception(
-          response['message'] ?? 'Failed to retrieve users with roles.');
+      throw Exception(message);
     }
   }
 
-  Future<void> refreshToken(BuildContext context) async {
+  bool _isSnackbarVisible = false;
+  void _showSnackbar(BuildContext context, String message,
+      {bool isSuccess = true}) {
+    if (_isSnackbarVisible) return;
+
+    _isSnackbarVisible = true;
+    {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+            SnackBar(
+              content: Text(
+                message,
+                style: TextStyle(
+                  color: isSuccess ? Colors.green : Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              backgroundColor:
+                  isSuccess ? Colors.grey.shade900 : Colors.red.shade100,
+            ),
+          )
+          .closed
+          .then((value) => _isSnackbarVisible = false);
+    }
+  }
+
+  Future<bool> _refreshToken(BuildContext context) async {
     final secureStorage = SecureStorage();
     final refreshToken = await secureStorage.readSecureData('refreshToken');
 
     if (refreshToken == null) {
-      throw Exception('No refresh token available.');
+      debugPrint('No refresh token found.');
+      return false;
     }
+    final uri = Uri.parse('$baseUrl$baseAddress?endpoint=refresh_token');
+    try {
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refresh_token': refreshToken}),
+      );
 
-    final response =
-        await post(context, 'refresh_token', {'refresh_token': refreshToken});
+      final responseBody = jsonDecode(response.body);
 
-    if (response['success']) {
-      final newAccessToken = response['data']['access_token'];
-      await secureStorage.writeSecureData('authToken', newAccessToken);
-    } else {
-      throw Exception(response['message']);
+      if (response.statusCode == 200 && responseBody['success']) {
+        final newAuthToken = responseBody['data']['auth_token'];
+        await secureStorage.writeSecureData('authToken', newAuthToken);
+        return true;
+      } else {
+        debugPrint('Token refresh failed: ${responseBody['message']}');
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Error refreshing token: $e');
+      return false;
     }
-  }
-
-  /// Hata ve başarı mesajlarını gösteren metot
-  void showSnackbar(BuildContext context, String message,
-      {bool isSuccess = true}) {
-    if (message.isEmpty) {
-      message = "An unknown error occurred."; // Varsayılan mesaj
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: isSuccess
-              ? TextStyle(
-                  color: Colors.grey.shade500, fontWeight: FontWeight.bold)
-              : const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: isSuccess ? Colors.green : Colors.red,
-      ),
-    );
   }
 }

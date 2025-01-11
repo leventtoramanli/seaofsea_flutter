@@ -37,6 +37,3 @@ class ThemeProvider with ChangeNotifier {
     }
   }
 }
-
-
-

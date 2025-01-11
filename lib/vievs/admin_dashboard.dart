@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:seaofsea/widgets/custom_app_bar.dart';
 
 class AdminDashboard extends StatelessWidget {
   const AdminDashboard({super.key});
@@ -6,9 +7,8 @@ class AdminDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin Dashboard')),
+      appBar: MyAppBar(title: 'Admin Dashboard'),
       body: const Center(child: Text('Welcome, Admin!')),
     );
   }
 }
-

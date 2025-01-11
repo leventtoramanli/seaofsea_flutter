@@ -19,7 +19,7 @@ class RoleManager {
   }
 
   static bool hasAccess(String role, String requiredRole) {
-  const roleHierarchy = [anonymous, user, moderator, admin];
-  return roleHierarchy.indexOf(role) >= roleHierarchy.indexOf(requiredRole);
-}
+    const roleHierarchy = [anonymous, user, moderator, admin];
+    return roleHierarchy.indexOf(role) >= roleHierarchy.indexOf(requiredRole);
+  }
 }

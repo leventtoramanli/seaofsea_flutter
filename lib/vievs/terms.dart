@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:seaofsea/widgets/custom_app_bar.dart';
 
 class Terms extends StatefulWidget {
   const Terms({super.key});
@@ -197,11 +198,7 @@ class _TermsState extends State<Terms> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        shadowColor: Theme.of(context).colorScheme.shadow,
-        title: const Text('SeaOfSea'),
-        centerTitle: true,
-      ),
+      appBar: MyAppBar(title: 'Terms and Conditions'),
       body: Row(
         children: [
           // Sol menü

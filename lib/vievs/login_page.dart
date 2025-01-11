@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -8,8 +9,8 @@ import 'package:seaofsea/utils/secure_storage.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/vievs/auth_page.dart';
-import 'package:seaofsea/vievs/register_page.dart';
 import 'package:seaofsea/vievs/terms.dart';
+import 'package:seaofsea/widgets/custom_app_bar.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';
 import 'package:seaofsea/widgets/ins_image.dart';
@@ -23,9 +24,10 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  bool _rememberMe = false;
-  final TextEditingController emailController = TextEditingController();
-  final TextEditingController passwordController = TextEditingController();
+  final TextEditingController emailController =
+      TextEditingController(text: 'leventtoramanli@gmail.com');
+  final TextEditingController passwordController =
+      TextEditingController(text: '145326326Ll');
 
   bool isLoading = false;
   final SecureStorage secureStorage = SecureStorage();
@@ -33,6 +35,7 @@ class _LoginPageState extends State<LoginPage> {
 
   bool wideScreen = false;
   double exWidth = 0.0;
+  bool rememberMe = false;
   @override
   void dispose() {
     emailController.dispose();
@@ -64,29 +67,35 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleLogin() async {
-    print('Login handle started');
-    
     if (_formKey.currentState!.validate()) {
       setState(() {
         isLoading = true;
       });
 
-      try {
-        final apiManager = Provider.of<ApiManager>(context, listen: false);
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final apiManager = Provider.of<ApiManager>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      print('AuthProvider instance: $authProvider');
 
-        final response = await apiManager.loginUser(context, {
+      try {
+        final deviceUUID = await authProvider.saveDeviceUUID();
+
+        final response = await apiManager
+            .request(context, endpoint: 'login', method: 'POST', body: {
           'email': emailController.text,
           'password': passwordController.text,
+          'device_uuid': deviceUUID,
+          'remember_me': rememberMe
         });
 
-        print('Response after API Manager: $response');
+        if (kDebugMode) {
+          print('Response after API Manager: $response');
+        }
 
         if (response['success']) {
           final token = response['data']['token'];
+          final refresh_token = response['data']['refresh_token'] ?? 'null';
           final role = response['data']['role'];
           final isVerified = response['data']['is_verified'];
-          print('If Success: $token');
 
           // Token doğruluğunu kontrol et
           if (token.isEmpty || !token.contains('.')) {
@@ -95,21 +104,18 @@ class _LoginPageState extends State<LoginPage> {
           }
           try {
             await secureStorage.writeSecureData('authToken', token);
+            await secureStorage.writeSecureData('refreshToken', refresh_token);
             await secureStorage.writeSecureData('role', role);
           } catch (e) {
             print('Error saving token: $e');
           }
-          
-
-          
 
           authProvider.login(token, role);
 
           if (isVerified != 1) {
             _showEmailVerificationDialog();
           } else {
-            Navigator.pushReplacementNamed(
-                context, role == 'admin' ? '/admin' : '/home');
+            Navigator.pushReplacementNamed(context, '/');
           }
         }
       } catch (e) {
@@ -124,7 +130,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: true);
 
     exWidth = MediaQuery.of(context).size.width * 0.6;
     if (exWidth < 650) {
@@ -153,6 +159,7 @@ class _LoginPageState extends State<LoginPage> {
     ];
 
     return Scaffold(
+      appBar: MyAppBar(title: 'Login'),
       body: wideScreen
           ? Center(
               child: Row(
@@ -184,6 +191,7 @@ class _LoginPageState extends State<LoginPage> {
 
   Center page(ThemeProvider themeProvider, List<Map<String, dynamic>> fields,
       BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     return Center(
       child: SingleChildScrollView(
         child: Container(
@@ -240,19 +248,19 @@ class _LoginPageState extends State<LoginPage> {
                         child: Row(
                           children: [
                             Checkbox(
-                              value: _rememberMe,
                               onChanged: (value) {
-                                setState(() {
-                                  _rememberMe = value ?? false;
-                                });
+                                setState(
+                                  () {
+                                    rememberMe = value ?? false;
+                                  },
+                                );
                               },
+                              value: true,
                             ),
                             Flexible(
                               child: GestureDetector(
                                 onTap: () {
-                                  setState(() {
-                                    _rememberMe = !_rememberMe;
-                                  });
+                                  setState(() {});
                                 },
                                 child: const Text(
                                   'Remember me',
@@ -303,7 +311,8 @@ class _LoginPageState extends State<LoginPage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const RegisterPage(),
+                                builder: (context) => const AuthPage(
+                                    mode: AuthMode.forgotPassword),
                               ),
                             );
                           },
@@ -328,8 +337,6 @@ class _LoginPageState extends State<LoginPage> {
                         onPressed: () async {
                           final apiManager =
                               Provider.of<ApiManager>(context, listen: false);
-                          final authProvider =
-                              Provider.of<AuthProvider>(context, listen: false);
 
                           try {
                             final response = await apiManager
@@ -380,13 +387,6 @@ class _LoginPageState extends State<LoginPage> {
                                   const AuthPage(mode: AuthMode.register),
                             ),
                           );
-
-                          /*Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const RegisterPage(),
-                            ),
-                          );*/
                         },
                         icon: Icons.app_registration,
                         backgroundColor: Colors.green.shade400,
