@@ -107,51 +107,8 @@ class _MainPageState extends State<MainPage> {
       themeMode: context.watch<ThemeProvider>().themeMode,
       home: Scaffold(
         body: authProvider.isLoggedIn
-                ? const HomePage()
-                : const AuthPage(mode: AuthMode.login), /*DynamicCustomForm(config: [{
-                  'field': {
-                    'name': 'username',
-                    'label': 'Username',
-                    'hint': 'Enter your username',
-                  },
-                },
-                {
-                  'field': {
-                    'name': 'feedback',
-                    'label': 'Feedback',
-                    'hint': 'Enter your feedback',
-                  },
-                },
-                {
-                  'field': {
-                    'name': 'gender',
-                    'label': 'Gender',
-                    'type': 'dropdown',
-                    'options': ['Male', 'Female', 'Other'],
-                  },
-                },
-                {
-                  'field': {
-                    'name': 'acceptTerms',
-                    'label': 'Accept Terms',
-                    'type': 'checkbox',
-                  },
-                },
-                {
-                  'field': {
-                    'name': 'notifications',
-                    'label': 'Enable Notifications',
-                    'type': 'switch',
-                  },
-                },
-                {
-                  'button': {
-                    'label': 'Submit',
-                  },
-                },
-              ],),
-      ), */
-            
+            ? const HomePage()
+            : const AuthPage(mode: AuthMode.login),
       ),
     );
   }
