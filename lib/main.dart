@@ -8,7 +8,7 @@ import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/color_blindness_provider.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
-import 'package:seaofsea/vievs/auth_page.dart';
+import 'package:seaofsea/vievs/auth/auth_page.dart';
 import 'package:seaofsea/vievs/home_page.dart';
 
 class MyHttpOverrides extends HttpOverrides {
@@ -105,10 +105,54 @@ class _MainPageState extends State<MainPage> {
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: context.watch<ThemeProvider>().themeMode,
-      home: authProvider.isLoggedIn
-          ? const HomePage()
-          : const AuthPage(mode: AuthMode.login),
+      home: Scaffold(
+        body: authProvider.isLoggedIn
+                ? const HomePage()
+                : const AuthPage(mode: AuthMode.login), /*DynamicCustomForm(config: [{
+                  'field': {
+                    'name': 'username',
+                    'label': 'Username',
+                    'hint': 'Enter your username',
+                  },
+                },
+                {
+                  'field': {
+                    'name': 'feedback',
+                    'label': 'Feedback',
+                    'hint': 'Enter your feedback',
+                  },
+                },
+                {
+                  'field': {
+                    'name': 'gender',
+                    'label': 'Gender',
+                    'type': 'dropdown',
+                    'options': ['Male', 'Female', 'Other'],
+                  },
+                },
+                {
+                  'field': {
+                    'name': 'acceptTerms',
+                    'label': 'Accept Terms',
+                    'type': 'checkbox',
+                  },
+                },
+                {
+                  'field': {
+                    'name': 'notifications',
+                    'label': 'Enable Notifications',
+                    'type': 'switch',
+                  },
+                },
+                {
+                  'button': {
+                    'label': 'Submit',
+                  },
+                },
+              ],),
+      ), */
+            
+      ),
     );
-  
   }
 }

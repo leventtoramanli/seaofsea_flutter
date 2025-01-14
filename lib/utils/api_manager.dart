@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
@@ -130,6 +131,46 @@ class ApiManager {
           )
           .closed
           .then((value) => _isSnackbarVisible = false);
+    }
+  }
+
+  Future<dynamic> uploadFile(
+    BuildContext context, {
+    required String endpoint,
+    required File file,
+  }) async {
+    final secureStorage = SecureStorage();
+    final authToken = await secureStorage.readSecureData('authToken');
+    final uri = Uri.parse('$baseUrl$baseAddress?endpoint=$endpoint');
+
+    final headers = {
+      'Authorization': 'Bearer $authToken',
+    };
+
+    try {
+      final request = http.MultipartRequest('POST', uri)
+        ..headers.addAll(headers)
+        ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(responseBody);
+        if (responseData['success']) {
+          _showSnackbar(
+              context, responseData['message'] ?? 'File uploaded successfully!',
+              isSuccess: true);
+          return responseData;
+        } else {
+          throw Exception(responseData['message'] ?? 'Upload failed.');
+        }
+      } else {
+        throw Exception('Failed to upload file: ${response.statusCode}');
+      }
+    } catch (e) {
+      _showSnackbar(context, 'Error uploading file: $e', isSuccess: false);
+      rethrow;
     }
   }
 

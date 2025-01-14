@@ -8,7 +8,7 @@ import 'package:seaofsea/utils/quotes.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
-import 'package:seaofsea/vievs/auth_page.dart';
+import 'package:seaofsea/vievs/auth/auth_page.dart';
 import 'package:seaofsea/vievs/terms.dart';
 import 'package:seaofsea/widgets/custom_app_bar.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
@@ -52,7 +52,7 @@ class _LoginPageState extends State<LoginPage> {
           content: const Text(
               'Please verify your email address. A verification email has been sent to your email address.'),
           actions: [
-            TextButton(onPressed: () {}, child: Text('Send Again')),
+            TextButton(onPressed: () {}, child: const Text('Send Again')),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Dialog'u kapat
@@ -74,12 +74,12 @@ class _LoginPageState extends State<LoginPage> {
 
       final apiManager = Provider.of<ApiManager>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      print('AuthProvider instance: $authProvider');
 
       try {
         final deviceUUID = await authProvider.saveDeviceUUID();
 
         final response = await apiManager
+            // ignore: use_build_context_synchronously
             .request(context, endpoint: 'login', method: 'POST', body: {
           'email': emailController.text,
           'password': passwordController.text,
@@ -93,21 +93,20 @@ class _LoginPageState extends State<LoginPage> {
 
         if (response['success']) {
           final token = response['data']['token'];
-          final refresh_token = response['data']['refresh_token'] ?? 'null';
+          final refreshToken = response['data']['refresh_token'] ?? 'null';
           final role = response['data']['role'];
           final isVerified = response['data']['is_verified'];
 
           // Token doğruluğunu kontrol et
           if (token.isEmpty || !token.contains('.')) {
-            print('Invalid token format.');
             throw Exception('Invalid token format.');
           }
           try {
             await secureStorage.writeSecureData('authToken', token);
-            await secureStorage.writeSecureData('refreshToken', refresh_token);
+            await secureStorage.writeSecureData('refreshToken', refreshToken);
             await secureStorage.writeSecureData('role', role);
           } catch (e) {
-            print('Error saving token: $e');
+            throw Exception('Error saving token: $e');
           }
 
           authProvider.login(token, role);
@@ -115,6 +114,7 @@ class _LoginPageState extends State<LoginPage> {
           if (isVerified != 1) {
             _showEmailVerificationDialog();
           } else {
+            // ignore: use_build_context_synchronously
             Navigator.pushReplacementNamed(context, '/');
           }
         }
@@ -346,8 +346,10 @@ class _LoginPageState extends State<LoginPage> {
                               await secureStorage.writeSecureData(
                                   'token', token);
                               authProvider.login(token!, 'anonymous');
+                              // ignore: use_build_context_synchronously
                               Navigator.pushReplacementNamed(context, '/home');
                             } else {
+                              // ignore: use_build_context_synchronously
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(response['message'] ??
@@ -356,6 +358,7 @@ class _LoginPageState extends State<LoginPage> {
                               );
                             }
                           } catch (e) {
+                            // ignore: use_build_context_synchronously
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(

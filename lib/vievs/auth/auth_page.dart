@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:seaofsea/vievs/forgot_password.dart';
-import 'package:seaofsea/vievs/login_page.dart';
-import 'package:seaofsea/vievs/register_page.dart';
+import 'package:seaofsea/vievs/auth/forgot_password.dart';
+import 'package:seaofsea/vievs/auth/login_page.dart';
+import 'package:seaofsea/vievs/auth/register_page.dart';
 
 enum AuthMode { login, register, forgotPassword, none }
 

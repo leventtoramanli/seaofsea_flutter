@@ -1,62 +1,72 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
+import 'package:seaofsea/services/routes.dart';
 
 class MenuItemsProvider extends ChangeNotifier {
   final List<Map<String, dynamic>> _menuItems = [
     {
       'icon': Icons.settings,
       'label': 'Settings',
-      'onTap': () => print('Settings tapped'),
+      'actionKey': 'settings',
       'order': 200,
     },
     {
       'icon': Icons.home,
       'label': 'Home',
-      'onTap': () => print('Home tapped'),
+      'actionKey': 'home',
       'order': 300,
     },
   ];
 
-  // Menü öğelerini sıralayarak döndür
-  List<Map<String, dynamic>> getMenuItems(BuildContext context) {
-    final AuthProvider authProvider =
-        Provider.of<AuthProvider>(context, listen: false);
+  final Map<String, Function(BuildContext)> _actionHandlers = {
+    'settings': (context) => navigateReplacement(context, '/settings'),
+    'home': (context) => navigateReplacement(context, '/home'),
+    'logout': (context) {
+      final authProvider =
+          Provider.of<AuthProvider>(context, listen: false);
+      authProvider.logout(context);
+      navigateReplacement(context, '/');
+    },
+    'profile': (context) => print('Profile tapped'),
+    'help': (context) => print('Help tapped'),
+  };
 
+  List<Map<String, dynamic>> getMenuItems(BuildContext context) {
     return _menuItems.map((item) {
-      if (item['label'] == 'Logout') {
-        return {
-          ...item,
-          'onTap': item['onTap'] ?? () => authProvider.logout(context),
-        };
-      }
       return {
         ...item,
-        'onTap': item['onTap'] ?? () => print('${item['label']} tapped'),
+        'onTap': () {
+          final actionKey = item['actionKey'];
+          if (_actionHandlers.containsKey(actionKey)) {
+            _actionHandlers[actionKey]!(context);
+          } else {
+            print('No handler for $actionKey');
+          }
+        },
       };
     }).toList()
       ..sort((a, b) => b['order'].compareTo(a['order']));
   }
 
   Future<void> loadDynamicMenuItems() async {
-    await Future.delayed(const Duration(seconds: 2));
     final dynamicItems = [
       {
         'icon': Icons.logout,
         'label': 'Logout',
-        'onTap': null,
+        'actionKey': 'logout',
         'order': 100,
       },
       {
         'icon': Icons.person,
         'label': 'Profile',
-        'onTap': () => print('Profile tapped'),
+        'actionKey': 'profile',
         'order': 201,
       },
       {
         'icon': Icons.help,
         'label': 'Help',
-        'onTap': () => print('Help tapped'),
+        'actionKey': 'help',
         'order': 102,
       },
     ];

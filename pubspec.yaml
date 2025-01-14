@@ -43,6 +43,10 @@ dependencies:
   auto_route: ^9.2.2
   google_fonts: ^6.2.1
   intl: ^0.20.1
+  image_picker: ^1.1.2
+  file_picker: ^8.1.7
+  flutter_exif_plugin: ^1.1.0
+  crop_image: ^1.0.15
 
 dev_dependencies:
   flutter_test:

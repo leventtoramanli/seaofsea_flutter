@@ -2,9 +2,36 @@ import 'package:flutter/material.dart';
 
 const Color seedColor = Color(0xFF213555); // Denizcilik için temel mavi
 
+class CustomColors extends ThemeExtension<CustomColors> {
+  final Color? customColor;
+
+  CustomColors({this.customColor});
+
+  @override
+  CustomColors copyWith({Color? customColor}) {
+    return CustomColors(
+      customColor: customColor ?? this.customColor,
+    );
+  }
+
+  @override
+  CustomColors lerp(ThemeExtension<CustomColors>? other, double t) {
+    if (other is! CustomColors) {
+      return this;
+    }
+    return CustomColors(
+      customColor: Color.lerp(customColor, other.customColor, t),
+    );
+  }
+}
+
+
 ThemeData lightTheme = ThemeData(
   useMaterial3: true,
   colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light),
+  extensions: <ThemeExtension<dynamic>>[
+    CustomColors(customColor: const Color(0xFF1E90FF)),
+  ],
   brightness: Brightness.light,
   appBarTheme: AppBarTheme(
     backgroundColor: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.light).primary,
@@ -28,12 +55,16 @@ ThemeData lightTheme = ThemeData(
       borderSide: BorderSide(color: ColorScheme.fromSeed(seedColor: seedColor).primary),
     ),
     labelStyle: const TextStyle(color: seedColor),
+    
   ),
 );
 
 ThemeData darkTheme = ThemeData(
   useMaterial3: true,
   colorScheme: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.dark),
+  extensions: <ThemeExtension<dynamic>>[
+    CustomColors(customColor: const Color(0xFF1E90FF)),
+  ],
   brightness: Brightness.dark,
   appBarTheme: AppBarTheme(
     backgroundColor: ColorScheme.fromSeed(seedColor: seedColor, brightness: Brightness.dark).surface,
