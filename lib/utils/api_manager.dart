@@ -134,10 +134,11 @@ class ApiManager {
     }
   }
 
-  Future<dynamic> uploadFile(
+  Future<dynamic> uploadImage(
     BuildContext context, {
     required String endpoint,
     required File file,
+    required Map<String, String> meta,
   }) async {
     final secureStorage = SecureStorage();
     final authToken = await secureStorage.readSecureData('authToken');
@@ -150,6 +151,7 @@ class ApiManager {
     try {
       final request = http.MultipartRequest('POST', uri)
         ..headers.addAll(headers)
+        ..fields.addAll(meta)
         ..files.add(await http.MultipartFile.fromPath('file', file.path));
 
       final response = await request.send();
@@ -159,8 +161,10 @@ class ApiManager {
         final responseData = jsonDecode(responseBody);
         if (responseData['success']) {
           _showSnackbar(
-              context, responseData['message'] ?? 'File uploaded successfully!',
-              isSuccess: true);
+            context,
+            responseData['message'] ?? 'File uploaded successfully!',
+            isSuccess: true,
+          );
           return responseData;
         } else {
           throw Exception(responseData['message'] ?? 'Upload failed.');

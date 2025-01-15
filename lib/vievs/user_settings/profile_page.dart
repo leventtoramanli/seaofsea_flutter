@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/utils/auth_provider.dart';
+import 'package:seaofsea/utils/secure_storage.dart';
 import 'package:seaofsea/widgets/custom_image_picker.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -20,13 +22,24 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() {
       _isUploading = true;
     });
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userId = authProvider.userInfo!['id'];
+    final userName = authProvider.userInfo!['name'];
+    final userSurName = authProvider.userInfo!['surname'];
 
     try {
       final apiManager = Provider.of<ApiManager>(context, listen: false);
-      final response = await apiManager.uploadFile(
+      final response = await apiManager.uploadImage(
         context,
         endpoint: 'upload_cover_image',
         file: imageFile,
+        meta: {
+          'Publisher': 'Sea of Sea',
+          'Description': 'Cover Image - $userName $userSurName - ${TimeOfDay.now()}',
+          'Title': 'Cover Image - $userName $userSurName',
+          'Author': 'Sea of Sea',
+          'UserId': userId,
+        },
       );
 
       if (response['success'] == true) {
