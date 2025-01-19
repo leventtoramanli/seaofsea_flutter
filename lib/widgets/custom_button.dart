@@ -4,14 +4,14 @@ class CustomButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
   final bool isLoading;
-  final Color? backgroundColor; // Özel arka plan rengi
-  final Color? textColor; // Özel yazı rengi
-  final Color? borderColor; // Özel kenarlık rengi
-  final IconData? icon; // Opsiyonel simge
-  final bool iconOnRight; // Simge yazının sağında mı olmalı?
+  final Color? backgroundColor;
+  final Color? textColor;
+  final Color? borderColor;
+  final IconData? icon;
+  final bool iconOnRight;
 
   const CustomButton({
-    Key? key,
+    super.key,
     required this.label,
     required this.onPressed,
     this.isLoading = false,
@@ -19,8 +19,8 @@ class CustomButton extends StatelessWidget {
     this.textColor,
     this.borderColor,
     this.icon,
-    this.iconOnRight = false, // Varsayılan olarak simge solda
-  }) : super(key: key);
+    this.iconOnRight = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -34,9 +34,9 @@ class CustomButton extends StatelessWidget {
         elevation: 2.0,
         side: borderColor != null
             ? BorderSide(color: borderColor!)
-            : null, // Kenarlık rengi opsiyonel
+            : null,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0), // Yuvarlatılmış köşeler
+          borderRadius: BorderRadius.circular(8.0),
         ),
         padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 20.0),
       ),
@@ -47,23 +47,23 @@ class CustomButton extends StatelessWidget {
               child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.0),
             )
           : Row(
-              mainAxisSize: MainAxisSize.min, // İçerik genişliği kadar
-              mainAxisAlignment: MainAxisAlignment.center, // Ortalanmış içerik
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (icon != null && !iconOnRight) // Simge soldaysa
+                if (icon != null && !iconOnRight)
                   Icon(icon, size: 20.0, color: textColor ?? theme.colorScheme.onPrimary),
-                if (icon != null && !iconOnRight) const SizedBox(width: 8.0), // Simge ve yazı arası boşluk
+                if (icon != null && !iconOnRight) const SizedBox(width: 8.0),
                 Flexible(
                   child: Text(
                     label,
                     style: TextStyle(
                       color: textColor ?? theme.colorScheme.onPrimary,
-                      fontWeight: FontWeight.w600, // Hafif kalın yazı
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                if (icon != null && iconOnRight) const SizedBox(width: 8.0), // Yazı ve simge arası boşluk
-                if (icon != null && iconOnRight) // Simge sağdaysa
+                if (icon != null && iconOnRight) const SizedBox(width: 8.0),
+                if (icon != null && iconOnRight)
                   Icon(icon, size: 20.0, color: textColor ?? theme.colorScheme.onPrimary),
               ],
             ),

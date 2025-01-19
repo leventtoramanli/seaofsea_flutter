@@ -45,7 +45,6 @@ dependencies:
   intl: ^0.20.1
   image_picker: ^1.1.2
   file_picker: ^8.1.7
-  flutter_exif_plugin: ^1.1.0
   crop_image: ^1.0.15
 
 dev_dependencies:

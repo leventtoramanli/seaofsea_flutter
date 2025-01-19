@@ -20,7 +20,7 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
     case '/admin':
       return MaterialPageRoute(builder: (context) => const AdminDashboard());
     case '/settings':
-      return MaterialPageRoute(builder: (context) => SettingsPage());
+      return MaterialPageRoute(builder: (context) => const SettingsPage());
     default:
       return MaterialPageRoute(
           builder: (context) => const Center(

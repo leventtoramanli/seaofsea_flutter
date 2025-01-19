@@ -6,6 +6,7 @@ class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
   @override
+  // ignore: library_private_types_in_public_api
   _SettingsPageState createState() => _SettingsPageState();
 }
 

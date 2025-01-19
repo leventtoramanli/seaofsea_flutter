@@ -1,17 +1,23 @@
-import 'dart:io';
-import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:image_picker/image_picker.dart';
 import 'package:crop_image/crop_image.dart';
+import 'package:provider/provider.dart';
+import 'package:seaofsea/utils/auth_provider.dart';
 
 class CustomImagePicker extends StatefulWidget {
   final double aspectRatio;
-  final Function(File?) onImagePicked;
+  final Function(File? file, String? base64) onImagePicked;
+  final Map<String, String> meta;
 
   const CustomImagePicker({
     super.key,
     required this.aspectRatio,
     required this.onImagePicked,
+    required this.meta,
   });
 
   @override
@@ -19,74 +25,144 @@ class CustomImagePicker extends StatefulWidget {
 }
 
 class _CustomImagePickerState extends State<CustomImagePicker> {
-  File? _selectedImage;
-  final CropController _cropController = CropController();
+  dynamic _selectedImage;
+  Uint8List? _selectedImageBytes;
+  late CropController _cropController;
+
+  @override
+  void initState() {
+    super.initState();
+    _cropController = CropController(
+      aspectRatio: widget.aspectRatio,
+    );
+  }
 
   Future<void> _pickAndCropImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    // ignore: use_build_context_synchronously
+    var authProvider = Provider.of<AuthProvider>(context, listen: false);
+    var userId = authProvider.userInfo!['id'];
 
     if (pickedFile != null) {
-      setState(() {
-        _selectedImage = File(pickedFile.path);
-      });
+      if (kIsWeb) {
+        final bytes = await pickedFile.readAsBytes();
+        setState(() {
+          _selectedImage = null;
+          _selectedImageBytes = bytes;
+        });
+      } else {
+        setState(() {
+          _selectedImage = File(pickedFile.path);
+          _selectedImageBytes = null;
+        });
+      }
 
-      // Açılır bir modalda kırpma işlemini gerçekleştirin
       await showDialog(
+        // ignore: use_build_context_synchronously
         context: context,
+        barrierDismissible: false,
         builder: (context) {
-          return AlertDialog(
-            title: const Text("Crop Image"),
-            content: AspectRatio(
-              aspectRatio: widget.aspectRatio,
-              child: CropImage(
-                controller: _cropController,
-                image: Image.file(
-                  _selectedImage!, // FileImage yerine Image.file
-                  fit: BoxFit.cover,
+          double progress = 0.0;
+          bool isCropping = true;
+
+          return StatefulBuilder(
+            builder: (context, dialogSetState) {
+              return AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15.0),
                 ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); // İptal
-                },
-                child: const Text("Cancel"),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  // Kırpılmış resmi al
-                  final croppedImage = await _cropController.croppedBitmap();
-                  if (croppedImage != null) {
-                    // Kırpılmış resmi ByteData'ya çevir
-                    final byteData = await croppedImage.toByteData(format: ui.ImageByteFormat.png);
+                title: Text(isCropping ? "Crop Image" : "Image Uploading..."),
+                content: isCropping
+                    ? AspectRatio(
+                        aspectRatio: widget.aspectRatio,
+                        child: CropImage(
+                          controller: _cropController,
+                          image: _selectedImage != null
+                              ? Image.file(_selectedImage!, fit: BoxFit.contain)
+                              : Image.memory(_selectedImageBytes!,
+                                  fit: BoxFit.contain),
+                        ),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(value: progress),
+                          const SizedBox(height: 10),
+                          Text(
+                              "Upload in progress... %${(progress * 100).toInt()}"),
+                        ],
+                      ),
+                actions: isCropping
+                    ? [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                          },
+                          child: const Text("Cancel"),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            final croppedImage =
+                                await _cropController.croppedBitmap();
+                            // ignore: unnecessary_null_comparison
+                            if (croppedImage != null) {
+                              final byteData = await croppedImage.toByteData(
+                                  format: ui.ImageByteFormat.png);
+                              if (byteData != null) {
+                                final croppedBytes =
+                                    byteData.buffer.asUint8List();
 
+                                if (!kIsWeb) {
+                                  // Mobil platformda dosya kaydı
+                                  final tempDir = Directory.systemTemp;
+                                  final file = File(
+                                      '${tempDir.path}/${userId}_${DateTime.now().millisecondsSinceEpoch}.png');
+                                  await file.writeAsBytes(croppedBytes);
 
-                    if (byteData != null) {
-                      // ByteData'dan Uint8List oluştur
-                      final croppedBytes = byteData.buffer.asUint8List();
+                                  setState(() {
+                                    _selectedImage = file;
+                                  });
+                                  widget.onImagePicked(file, null);
+                                } else {
+                                  // Web platformunda base64 formatına dönüştürme
+                                  final base64Image =
+                                      base64Encode(croppedBytes);
 
-                      // Geçici bir dosyaya kaydet
-                      final tempDir = Directory.systemTemp;
-                      final file = File(
-                          '${tempDir.path}/cropped_image_${DateTime.now().millisecondsSinceEpoch}.png');
-                      await file
-                          .writeAsBytes(croppedBytes); // Uint8List kaydediliyor
+                                  setState(() {
+                                    _selectedImageBytes = croppedBytes;
+                                  });
+                                  widget.onImagePicked(null, base64Image);
+                                }
 
-                      setState(() {
-                        _selectedImage =
-                            file; // Yeni kırpılmış resmi seçili olarak ayarla
-                      });
+                                dialogSetState(() {
+                                  isCropping = false;
+                                });
 
-                      widget.onImagePicked(file); // Callback'i çağır
-                      Navigator.pop(context); // Kırpma tamamlandı
-                    }
-                  }
-                },
-                child: const Text("Crop"),
-              ),
-            ],
+                                for (int i = 0; i < 99; i++) {
+                                  await Future.delayed(
+                                      const Duration(milliseconds: 50));
+                                  dialogSetState(() {
+                                    progress = i / 100.0;
+                                  });
+                                }
+
+                                dialogSetState(() {
+                                  progress = 1.0;
+                                });
+                                await Future.delayed(
+                                    const Duration(seconds: 1));
+                                // ignore: use_build_context_synchronously
+                                Navigator.pop(context);
+                              }
+                            }
+                          },
+                          child: const Text("Crop"),
+                        ),
+                      ]
+                    : null,
+              );
+            },
           );
         },
       );
@@ -99,17 +175,24 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
       onTap: _pickAndCropImage,
       child: Container(
         width: double.infinity,
-        height: 200,
+        height: (MediaQuery.of(context).size.width / (widget.aspectRatio)) < 150
+            ? 150
+            : (MediaQuery.of(context).size.width / (widget.aspectRatio)),
         decoration: BoxDecoration(
           color: Colors.grey[300],
           image: _selectedImage != null
               ? DecorationImage(
-                  image: FileImage(_selectedImage!), // FileImage kullanımı
+                  image: FileImage(_selectedImage!),
                   fit: BoxFit.cover,
                 )
-              : null,
+              : _selectedImageBytes != null
+                  ? DecorationImage(
+                      image: MemoryImage(_selectedImageBytes!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
         ),
-        child: _selectedImage == null
+        child: (_selectedImage == null && _selectedImageBytes == null)
             ? const Center(
                 child: Icon(Icons.add_a_photo, size: 40, color: Colors.white),
               )

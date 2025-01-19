@@ -1,9 +1,9 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_exif_plugin/flutter_exif_plugin.dart';
+//import 'package:flutter_exif_plugin/flutter_exif_plugin.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/dynamic_file_provider.dart';
-import 'package:seaofsea/widgets/custom_image_picker.dart';
+//import 'package:seaofsea/widgets/custom_image_picker.dart';
 
 class DynamicCustomForm extends StatefulWidget {
   final List<Map<String, dynamic>> config;
@@ -285,8 +285,9 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8.0),
-        CustomImagePicker(
+        /*CustomImagePicker(
           aspectRatio: field['aspectRatio'] ?? 1.0,
+          meta:{},
           onImagePicked: (file) {
             if (file != null) {
               setState(() {
@@ -294,7 +295,7 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
               });
             }
           },
-        ),
+        ),*/
         if (imageValues[field['name']] != null)
           Padding(
             padding: const EdgeInsets.only(top: 8.0),
@@ -308,12 +309,12 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
   }
 
   Future<void> readImageMetadata(String imagePath) async {
-    FlutterExif exif = FlutterExif.fromPath(imagePath);
+    /*FlutterExif exif = FlutterExif.fromPath(imagePath);
 
     String? date = await exif.getAttribute('DateTimeOriginal');
     String? cameraModel = await exif.getAttribute('Model');
     debugPrint('Date Taken: $date');
-    debugPrint('Camera Model: $cameraModel');
+    debugPrint('Camera Model: $cameraModel');*/
   }
 
   Widget buildDatePickerField(

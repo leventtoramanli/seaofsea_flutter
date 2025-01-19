@@ -27,9 +27,6 @@ class RoleProvider with ChangeNotifier {
   String getRoleNameById(int id) {
     final role = _roles.firstWhere((role) => role['id'] == id,
         orElse: () => {'name': 'Guest'});
-        print('Role name: ${role['name']}');
-        print('Role id: ${role['id']}');
-        print('Roles: $_roles');
     return role['name'];
   }
 }

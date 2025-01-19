@@ -28,8 +28,8 @@ class MenuItemsProvider extends ChangeNotifier {
       authProvider.logout(context);
       navigateReplacement(context, '/');
     },
-    'profile': (context) => print('Profile tapped'),
-    'help': (context) => print('Help tapped'),
+    'profile': (context) => debugPrint('Profile tapped'),
+    'help': (context) => debugPrint('Help tapped'),
   };
 
   List<Map<String, dynamic>> getMenuItems(BuildContext context) {
@@ -41,7 +41,7 @@ class MenuItemsProvider extends ChangeNotifier {
           if (_actionHandlers.containsKey(actionKey)) {
             _actionHandlers[actionKey]!(context);
           } else {
-            print('No handler for $actionKey');
+            debugPrint('No handler for $actionKey');
           }
         },
       };

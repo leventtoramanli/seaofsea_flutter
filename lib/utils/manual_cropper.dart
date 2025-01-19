@@ -1,4 +1,4 @@
-import 'dart:async';
+/*import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -14,6 +14,7 @@ class ManualCropper extends StatefulWidget {
   });
 
   @override
+  // ignore: library_private_types_in_public_api
   _ManualCropperState createState() => _ManualCropperState();
 }
 
@@ -225,3 +226,4 @@ class _CropMaskPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
+*/

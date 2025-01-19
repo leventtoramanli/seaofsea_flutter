@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+//import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -46,7 +46,7 @@ class _ForgotPasswordState extends State<ForgotPassword> {
           content: const Text(
               'Check your email address. A password reset email has been sent to your email address.'),
           actions: [
-            TextButton(onPressed: () {}, child: Text('Send Again')),
+            TextButton(onPressed: () {}, child: const Text('Send Again')),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();

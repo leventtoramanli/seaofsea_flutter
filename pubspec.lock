@@ -315,14 +315,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_exif_plugin:
-    dependency: "direct main"
-    description:
-      name: flutter_exif_plugin
-      sha256: "3639f0422ef626fab87536716ab69f1b6239ee249a2c8f6951008eb5d4826a53"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.0"
   flutter_lints:
     dependency: "direct dev"
     description:

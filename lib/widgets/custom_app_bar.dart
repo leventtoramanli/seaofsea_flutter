@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:seaofsea/utils/theme_selector.dart';
 
 class MyAppBar extends AppBar {
+  // ignore: use_super_parameters
   MyAppBar(
       {super.key,
       String? title,

@@ -75,6 +75,7 @@ class CustomScaffold extends StatelessWidget {
                   onPressed: item['onTap'],
                 );
               }
+            // ignore: unnecessary_to_list_in_spreads
             }).toList(),
           const ThemeSelector(),
         ],
@@ -105,6 +106,7 @@ class CustomScaffold extends StatelessWidget {
                       title: Text(item['label']),
                       onTap: item['onTap'],
                     );
+                  // ignore: unnecessary_to_list_in_spreads
                   }).toList(),
                 ],
               ),

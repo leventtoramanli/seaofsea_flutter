@@ -138,33 +138,40 @@ class ApiManager {
     BuildContext context, {
     required String endpoint,
     required File file,
-    required Map<String, String> meta,
   }) async {
     final secureStorage = SecureStorage();
     final authToken = await secureStorage.readSecureData('authToken');
+    final userId = await secureStorage.readSecureData('userId');
     final uri = Uri.parse('$baseUrl$baseAddress?endpoint=$endpoint');
 
     final headers = {
       'Authorization': 'Bearer $authToken',
     };
-
+    print('Headers: $userId');
     try {
       final request = http.MultipartRequest('POST', uri)
         ..headers.addAll(headers)
-        ..fields.addAll(meta)
+        ..fields['userId'] = userId.toString()
         ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      debugPrint('Request Body: ${request.fields}');
 
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
 
+      debugPrint('Response Body: $responseBody');
+
       if (response.statusCode == 200) {
         final responseData = jsonDecode(responseBody);
+        print('Response Data: $responseData');
         if (responseData['success']) {
           _showSnackbar(
+            // ignore: use_build_context_synchronously
             context,
             responseData['message'] ?? 'File uploaded successfully!',
             isSuccess: true,
           );
+          print('File uploaded successfully! ${responseData['data']}');
           return responseData;
         } else {
           throw Exception(responseData['message'] ?? 'Upload failed.');
@@ -173,8 +180,9 @@ class ApiManager {
         throw Exception('Failed to upload file: ${response.statusCode}');
       }
     } catch (e) {
+      print('Error uploading file: $e');
+      // ignore: use_build_context_synchronously
       _showSnackbar(context, 'Error uploading file: $e', isSuccess: false);
-      rethrow;
     }
   }
 

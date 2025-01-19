@@ -12,11 +12,9 @@ class ImageService {
   }) async {
     try {
       // Resim seçimi
-      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? pickedFile =
+          await _picker.pickImage(source: ImageSource.gallery);
       if (pickedFile == null) return null;
-
-      // Manuel kırpma işlemi (Örneğin, Crop widget veya farklı yöntemlerle yapılabilir)
-      // Eğer manuel kırpma gerekiyorsa burada eklenir.
 
       return File(pickedFile.path);
     } catch (e) {

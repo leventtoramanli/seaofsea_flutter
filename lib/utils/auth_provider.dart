@@ -11,7 +11,7 @@ class AuthProvider with ChangeNotifier {
   String? _authToken;
   String? _role;
   Map<String, dynamic>? _userInfo;
-  bool _isLoadinData = false;
+  final bool _isLoadinData = false;
 
   String? get token => _authToken;
   bool get isLoggedIn => _authToken != null;
@@ -62,6 +62,7 @@ class AuthProvider with ChangeNotifier {
     _userInfo = _decodeToken(token);
     notifyListeners();
     final storage = SecureStorage();
+    await storage.writeSecureData('userId', _userInfo!['id'].toString());
     await storage.writeSecureData('authToken', token);
     await storage.writeSecureData('role', role);
     if (_userInfo != null && _userInfo!['refresh_token'] != null) {
@@ -77,6 +78,7 @@ class AuthProvider with ChangeNotifier {
       final deviceUUID = await storage.readSecureData('deviceUUID');
 
       if (refreshToken != null && deviceUUID != null) {
+        // ignore: use_build_context_synchronously
         final apiManager = Provider.of<ApiManager>(context, listen: false);
         await apiManager
             // ignore: use_build_context_synchronously
@@ -96,9 +98,9 @@ class AuthProvider with ChangeNotifier {
       _authToken = null;
       _role = null;
       notifyListeners();
-      print('Notify logout');
     } catch (e) {
       debugPrint('Error during logout: $e');
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Logout failed: $e')),
       );
@@ -108,7 +110,6 @@ class AuthProvider with ChangeNotifier {
   Future<void> validateToken(BuildContext context) async {
     final storage = SecureStorage();
     final refreshToken = await storage.readSecureData('refreshToken');
-    print('Refresh token: $refreshToken');
     try {
       if (refreshToken == null) {
         // ignore: use_build_context_synchronously
@@ -123,17 +124,18 @@ class AuthProvider with ChangeNotifier {
           endpoint: 'check_token',
           method: 'POST',
           body: {'refresh_token': refreshToken});
-      print('isValid: $isValid');
-      print('Refresh token: $refreshToken');
 
       if (!isValid['success']) {
+        // ignore: use_build_context_synchronously
         await logout(context);
       } else {
         debugPrint('Token is valid.');
       }
     } catch (e) {
       debugPrint('Error during token validation: $e');
+      // ignore: use_build_context_synchronously
       if (ScaffoldMessenger.maybeOf(context) != null) {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Token validation failed')),
         );
@@ -141,6 +143,7 @@ class AuthProvider with ChangeNotifier {
         debugPrint('Scaffold is not available');
       }
 
+      // ignore: use_build_context_synchronously
       await logout(context); // Herhangi bir hata durumunda logout yap
     }
   }
