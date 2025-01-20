@@ -12,12 +12,20 @@ class CustomImagePicker extends StatefulWidget {
   final double aspectRatio;
   final Function(File? file, String? base64) onImagePicked;
   final Map<String, String> meta;
+  final double iwidth;
+  final double iheight;
+  final double iradius;
+  final String? existingImageUrl;
 
   const CustomImagePicker({
     super.key,
     required this.aspectRatio,
     required this.onImagePicked,
     required this.meta,
+    this.iwidth = 0.0,
+    this.iheight = 0.0,
+    this.iradius = 0.0,
+    this.existingImageUrl,
   });
 
   @override
@@ -171,33 +179,63 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _pickAndCropImage,
-      child: Container(
-        width: double.infinity,
-        height: (MediaQuery.of(context).size.width / (widget.aspectRatio)) < 150
+    final double cWidth = widget.iwidth != 0.0 ? widget.iwidth : double.infinity;
+    final double cHeight = widget.iheight != 0.0
+        ? widget.iheight
+        : (MediaQuery.of(context).size.width / widget.aspectRatio) < 150
             ? 150
-            : (MediaQuery.of(context).size.width / (widget.aspectRatio)),
-        decoration: BoxDecoration(
-          color: Colors.grey[300],
-          image: _selectedImage != null
-              ? DecorationImage(
-                  image: FileImage(_selectedImage!),
-                  fit: BoxFit.cover,
-                )
-              : _selectedImageBytes != null
-                  ? DecorationImage(
-                      image: MemoryImage(_selectedImageBytes!),
-                      fit: BoxFit.cover,
-                    )
-                  : null,
+            : (MediaQuery.of(context).size.width / widget.aspectRatio);
+    final double bRadius = widget.iradius;
+    return Stack(
+      children: [
+        Container(
+          width: cWidth,
+          height: cHeight,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(bRadius),
+            image: _selectedImage != null
+                ? DecorationImage(
+                    image: FileImage(_selectedImage!),
+                    fit: BoxFit.cover,
+                  )
+                : _selectedImageBytes != null
+                    ? DecorationImage(
+                        image: MemoryImage(_selectedImageBytes!),
+                        fit: BoxFit.cover,
+                      )
+                    : widget.existingImageUrl != null &&
+                            widget.existingImageUrl!.isNotEmpty
+                        ? DecorationImage(
+                            image: NetworkImage(widget.existingImageUrl!),
+                            fit: BoxFit.cover,
+                          )
+                        : const DecorationImage(
+                            image: AssetImage('assets/cover.jpg'),
+                            fit: BoxFit.cover,
+                          ),
+          ),
         ),
-        child: (_selectedImage == null && _selectedImageBytes == null)
-            ? const Center(
-                child: Icon(Icons.add_a_photo, size: 40, color: Colors.white),
-              )
-            : null,
-      ),
+        Positioned(
+          bottom: 10,
+          right: 10,
+          child: GestureDetector(
+            onTap: _pickAndCropImage,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black.withAlpha(60),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.add_a_photo,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

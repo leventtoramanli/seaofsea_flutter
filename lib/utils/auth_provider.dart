@@ -24,13 +24,11 @@ class AuthProvider with ChangeNotifier {
   String getRole(BuildContext context) {
     final roleProvider = Provider.of<RoleProvider>(context, listen: false);
 
-    // Rol geçerli mi kontrol et
     if (_role != null && int.tryParse(_role!) != null) {
       final int roleId = int.parse(_role!);
       return roleProvider.getRoleNameById(roleId);
     }
 
-    // Varsayılan olarak "Guest" döndür
     return roleProvider.getRoleNameById(3); // ID'si 3 olan "Guest" rolü
   }
 
@@ -176,6 +174,38 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('Error decoding token: $e');
       return null;
+    }
+  }
+
+  Future<void> refreshUserInfo(BuildContext context) async {
+    try {
+      // `userId`'yi mevcut `userInfo`'dan alın
+      final userId = _userInfo?['id'];
+      if (userId == null) {
+        throw Exception('User ID not found in userInfo.');
+      }
+
+      // API çağrısı
+      final apiManager = Provider.of<ApiManager>(context, listen: false);
+      final response = await apiManager.request(
+        context,
+        endpoint: 'user/$userId',
+        method: 'GET',
+      );
+
+      // API'den gelen kullanıcı bilgilerini güncelle
+      if (response['success'] == true && response['data'] != null) {
+        _userInfo = response['data'];
+        notifyListeners(); // Dinleyicilere değişikliği bildir
+      } else {
+        throw Exception(
+            'Failed to refresh user info. Response: ${response['message']}');
+      }
+    } catch (e) {
+      debugPrint('Error refreshing user info: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to refresh user info: $e')),
+      );
     }
   }
 }

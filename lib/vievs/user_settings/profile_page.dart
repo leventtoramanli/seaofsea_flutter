@@ -129,12 +129,17 @@ class _ProfilePageState extends State<ProfilePage> {
                   'Author': 'Sea of Sea',
                   'UserId': userId.toString(),
                 },
+                existingImageUrl:
+                    'http://localhost/images/user/covers/${authProvider.userInfo!['cover_image']}',
                 onImagePicked: (file, base64Image) async {
                   if (file != null || base64Image != null) {
                     setState(() {
                       _coverImage = file;
                     });
                     await handleImageUpload(file, base64Image);
+                    final authProvider =
+                        Provider.of<AuthProvider>(context, listen: false);
+                    await authProvider.refreshUserInfo(context);
                   }
                 },
               ),
@@ -153,12 +158,38 @@ class _ProfilePageState extends State<ProfilePage> {
                             offset: Offset(0, 0),
                           ),
                         ]),
-                    child: Image.asset(
+                    child: CustomImagePicker(
+                      aspectRatio: 1,
+                      iwidth: 100,
+                      iheight: 100,
+                      iradius: 12.0,
+                      meta: {
+                        'Publisher': 'Sea of Sea',
+                        'Description': 'Cover Image - $userName $userSurName',
+                        'Title': 'Cover Image - $userName $userSurName',
+                        'Author': 'Sea of Sea',
+                        'UserId': userId.toString(),
+                      },
+                      existingImageUrl:
+                          'http://localhost/images/user/covers/${authProvider.userInfo!['cover_image']}',
+                      onImagePicked: (file, base64Image) async {
+                        if (file != null || base64Image != null) {
+                          setState(() {
+                            _coverImage = file;
+                          });
+                          await handleImageUpload(file, base64Image);
+                          final authProvider =
+                              Provider.of<AuthProvider>(context, listen: false);
+                          await authProvider.refreshUserInfo(context);
+                        }
+                      },
+                    ),
+                    /*Image.asset(
                       'assets/sailorHat.png',
                       width: 100,
                       height: 100,
                       fit: BoxFit.fitWidth,
-                    ),
+                    ),*/
                   ),
                   const SizedBox(width: 10),
                   Expanded(
