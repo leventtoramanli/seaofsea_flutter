@@ -15,6 +15,7 @@ class CustomImagePicker extends StatefulWidget {
   final double iwidth;
   final double iheight;
   final double iradius;
+  final dynamic ishadow;
   final String? existingImageUrl;
 
   const CustomImagePicker({
@@ -25,6 +26,7 @@ class CustomImagePicker extends StatefulWidget {
     this.iwidth = 0.0,
     this.iheight = 0.0,
     this.iradius = 0.0,
+    this.ishadow = false,
     this.existingImageUrl,
   });
 
@@ -179,7 +181,8 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
 
   @override
   Widget build(BuildContext context) {
-    final double cWidth = widget.iwidth != 0.0 ? widget.iwidth : double.infinity;
+    final double cWidth =
+        widget.iwidth != 0.0 ? widget.iwidth : double.infinity;
     final double cHeight = widget.iheight != 0.0
         ? widget.iheight
         : (MediaQuery.of(context).size.width / widget.aspectRatio) < 150
@@ -192,6 +195,14 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
           width: cWidth,
           height: cHeight,
           decoration: BoxDecoration(
+            boxShadow: widget.ishadow
+                ? const [
+                    BoxShadow(
+                        color: Colors.black54,
+                        blurRadius: 5,
+                        offset: Offset(0, 0))
+                  ]
+                : [],
             color: Colors.white,
             borderRadius: BorderRadius.circular(bRadius),
             image: _selectedImage != null

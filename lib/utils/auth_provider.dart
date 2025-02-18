@@ -23,13 +23,8 @@ class AuthProvider with ChangeNotifier {
   }
   String getRole(BuildContext context) {
     final roleProvider = Provider.of<RoleProvider>(context, listen: false);
-
-    if (_role != null && int.tryParse(_role!) != null) {
-      final int roleId = int.parse(_role!);
-      return roleProvider.getRoleNameById(roleId);
-    }
-
-    return roleProvider.getRoleNameById(3); // ID'si 3 olan "Guest" rolü
+    final int roleId = int.tryParse(_role ?? '') ?? 3;
+    return roleProvider.getRoleNameById(roleId);
   }
 
   String generateUUID() {
@@ -57,13 +52,28 @@ class AuthProvider with ChangeNotifier {
   Future<void> login(String token, String role) async {
     _authToken = token;
     _role = role;
-    _userInfo = _decodeToken(token);
+    _userInfo = _decodeToken(token); // ✅ Token decode ediliyor
     notifyListeners();
+
     final storage = SecureStorage();
-    await storage.writeSecureData('userId', _userInfo!['id'].toString());
+
+    // ✅ `user_id`yi hem token'dan hem de doğrudan API'den almak için güvenli kontrol
+    String? userId = _userInfo?['id']?.toString();
+    if (userId == null) {
+      userId = await storage
+          .readSecureData('userId'); // Eğer daha önce kaydedilmişse al
+    }
+
+    if (userId != null) {
+      await storage.writeSecureData('userId', userId);
+    } else {
+      debugPrint('🛑 Warning: user_id is NULL!');
+    }
+
     await storage.writeSecureData('authToken', token);
     await storage.writeSecureData('role', role);
-    if (_userInfo != null && _userInfo!['refresh_token'] != null) {
+
+    if (_userInfo != null && _userInfo!.containsKey('refresh_token')) {
       await storage.writeSecureData(
           'refreshToken', _userInfo!['refresh_token']);
     }
@@ -99,9 +109,11 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('Error during logout: $e');
       // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Logout failed: $e')),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Logout failed: $e')),
+        );
+      }
     }
   }
 
@@ -131,18 +143,17 @@ class AuthProvider with ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error during token validation: $e');
-      // ignore: use_build_context_synchronously
-      if (ScaffoldMessenger.maybeOf(context) != null) {
+      if (context.mounted) {
         // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Token validation failed')),
-        );
-      } else {
-        debugPrint('Scaffold is not available');
+        if (ScaffoldMessenger.maybeOf(context) != null) {
+          // ignore: use_build_context_synchronously
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Token validation failed')),
+          );
+        }
+        // ignore: use_build_context_synchronously
+        await logout(context); // Herhangi bir hata durumunda logout yap
       }
-
-      // ignore: use_build_context_synchronously
-      await logout(context); // Herhangi bir hata durumunda logout yap
     }
   }
 
@@ -178,34 +189,25 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> refreshUserInfo(BuildContext context) async {
+    final apiManager = Provider.of<ApiManager>(context, listen: false);
     try {
-      // `userId`'yi mevcut `userInfo`'dan alın
-      final userId = _userInfo?['id'];
-      if (userId == null) {
-        throw Exception('User ID not found in userInfo.');
-      }
-
-      // API çağrısı
-      final apiManager = Provider.of<ApiManager>(context, listen: false);
-      final response = await apiManager.request(
-        context,
-        endpoint: 'user/$userId',
-        method: 'GET',
-      );
-
-      // API'den gelen kullanıcı bilgilerini güncelle
-      if (response['success'] == true && response['data'] != null) {
+      final response = await apiManager.get(context, 'get_user_info');
+      if (response['success'] == true) {
         _userInfo = response['data'];
-        notifyListeners(); // Dinleyicilere değişikliği bildir
+        final secureStorage = SecureStorage();
+        await secureStorage.writeSecureData('userId', _userInfo?['id']);
+        await secureStorage.writeSecureData('email', _userInfo?['email']);
+        await secureStorage.writeSecureData('name', _userInfo?['name']);
+        await secureStorage.writeSecureData('surname', _userInfo?['surname']);
+        await secureStorage.writeSecureData('coverImage', _userInfo?['cover_image']);
+        notifyListeners();
+
+        debugPrint('✅ User info refreshed successfully: $_userInfo');
       } else {
-        throw Exception(
-            'Failed to refresh user info. Response: ${response['message']}');
+        throw Exception(response['message']);
       }
     } catch (e) {
-      debugPrint('Error refreshing user info: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to refresh user info: $e')),
-      );
+      debugPrint('⚠️ Error refreshing user info: $e');
     }
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,71 @@ class _ProfilePageState extends State<ProfilePage> {
   // ignore: unused_field
   File? _coverImage;
   bool _isUploading = false;
+  bool _isLoading = true;
+  late final ApiManager _apiManager;
+  late final AuthProvider _authProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    _apiManager = Provider.of<ApiManager>(context, listen: false);
+    _authProvider = Provider.of<AuthProvider>(context, listen: false);
+    _refreshUserData();
+  }
+ Future<void> _refreshUserData() async {
+    if (!_authProvider.isLoggedIn) {
+      debugPrint('User not logged in, skipping refresh.');
+      setState(() => _isLoading = false);
+      return;
+    }
+    try {
+      await _authProvider.refreshUserInfo(context);
+      debugPrint('User info refreshed successfully.');
+      setState(() => _isLoading = false);
+      _checkUserImage(); // ✅ Kullanıcı verisi geldikten sonra çağırıyoruz
+    } catch (e) {
+      debugPrint('Failed to refresh user info: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _checkUserImage() async {
+    if (_authProvider.userInfo == null || !_authProvider.isLoggedIn) {
+      debugPrint('Skipping image check. User not logged in.');
+      return;
+    }
+
+    final userInfo = _authProvider.userInfo;
+    final List<dynamic>? items = userInfo?['items'];
+    final userId = (items != null && items.isNotEmpty) ? items[0]['id'] : null;
+    print('Returned: $userInfo');
+    if (userInfo?['id'] == null) {
+      debugPrint('Error: user_id is null before checking image!');
+      return;
+    }
+
+    debugPrint('Checking cover image for user ID: $userId');
+    try {
+      final response = await _apiManager.post(
+        context,
+        'check_cover_images',
+        {'user_id': userId.toString()},
+      );
+
+      if (response == null || !response.containsKey('success')) {
+        throw Exception('Invalid API response format');
+      }
+
+      if (!response['success']) {
+        debugPrint('Image check failed: ${response['message']}');
+      } else {
+        debugPrint('Image check successful: ${response['message']}');
+      }
+    } catch (e) {
+      debugPrint('Error while checking user image: $e');
+    }
+  }
+
 
   Future<String?> uploadImage(File file) async {
     final apiManager = Provider.of<ApiManager>(context, listen: false);
@@ -45,17 +111,20 @@ class _ProfilePageState extends State<ProfilePage> {
 
     try {
       if (file != null) {
-        // Mobil: Dosyayı doğrudan yükle
         final fileName = await uploadImage(file);
-        print('File name: $fileName');
         if (fileName != null) {
-          print('Starting database update...');
           await updateDatabase(fileName);
         }
       } else if (base64Image != null) {
         final apiManager = Provider.of<ApiManager>(context, listen: false);
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        final userId = authProvider.userInfo!['id'];
+        String? userId = authProvider.userInfo?['id'];
+
+        if (userId == null) {
+          debugPrint("User ID is empty, refreshing user info...");
+          await authProvider.refreshUserInfo(context);
+          userId = authProvider.userInfo?['id'];
+        }
 
         final response = await apiManager.post(context, 'upload_cover_image', {
           'image_base64': base64Image,
@@ -70,8 +139,6 @@ class _ProfilePageState extends State<ProfilePage> {
         });
 
         if (response['success'] == true) {
-          debugPrint(
-              'Base64 image uploaded successfully: ${response['message']}');
           final fileName = response['data']['file_name'];
           await updateDatabase(fileName);
         } else {
@@ -90,7 +157,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> updateDatabase(String fileName) async {
     final apiManager = Provider.of<ApiManager>(context, listen: false);
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final userId = authProvider.userInfo!['id'];
+    final userId = authProvider.userInfo?['id'];
     print('Update function called with file name: $fileName');
     final response = await apiManager.post(
       context,
@@ -110,10 +177,18 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+          child: CircularProgressIndicator());
+    }
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final userId = authProvider.userInfo!['id'];
+    final apiManager = ApiManager.empty();
+    final userId = authProvider.userInfo?['id'];
     final userName = authProvider.userInfo!['name'];
     final userSurName = authProvider.userInfo!['surname'];
+
+    final coverImageUrl = authProvider.userInfo!['cover_image'];
+    //final isAssetImage = coverImageUrl == null;
 
     return Scaffold(
       body: SingleChildScrollView(
@@ -129,17 +204,24 @@ class _ProfilePageState extends State<ProfilePage> {
                   'Author': 'Sea of Sea',
                   'UserId': userId.toString(),
                 },
-                existingImageUrl:
-                    'http://localhost/images/user/covers/${authProvider.userInfo!['cover_image']}',
-                onImagePicked: (file, base64Image) async {
+                existingImageUrl: coverImageUrl != null
+                    ? '${apiManager.showImage(coverImageUrl, false)}'
+                    : null,
+                onImagePicked: (file, String? base64Image) async {
                   if (file != null || base64Image != null) {
-                    setState(() {
-                      _coverImage = file;
-                    });
-                    await handleImageUpload(file, base64Image);
-                    final authProvider =
-                        Provider.of<AuthProvider>(context, listen: false);
-                    await authProvider.refreshUserInfo(context);
+                    // Yükleme işlemini başlat
+                    final apiManager =
+                        Provider.of<ApiManager>(context, listen: false);
+                    final response = await apiManager.uploadImage(
+                      context,
+                      endpoint: 'upload_cover_image',
+                      file: file!,
+                    );
+                    print('Response: $response');
+                    if (response['success'] || response != null) {
+                      //final newCoverImage = response['data']['file_name'];
+                      await authProvider.refreshUserInfo(context);
+                    }
                   }
                 },
               ),
@@ -170,26 +252,27 @@ class _ProfilePageState extends State<ProfilePage> {
                         'Author': 'Sea of Sea',
                         'UserId': userId.toString(),
                       },
-                      existingImageUrl:
-                          'http://localhost/images/user/covers/${authProvider.userInfo!['cover_image']}',
-                      onImagePicked: (file, base64Image) async {
+                      existingImageUrl: coverImageUrl != null
+                          ? '${apiManager.showImage(coverImageUrl, false)}'
+                          : null,
+                      onImagePicked: (file, String? base64Image) async {
                         if (file != null || base64Image != null) {
-                          setState(() {
-                            _coverImage = file;
-                          });
-                          await handleImageUpload(file, base64Image);
-                          final authProvider =
-                              Provider.of<AuthProvider>(context, listen: false);
-                          await authProvider.refreshUserInfo(context);
+                          // Yükleme işlemini başlat
+                          final apiManager =
+                              Provider.of<ApiManager>(context, listen: false);
+                          final response = await apiManager.uploadImage(
+                            context,
+                            endpoint: 'upload_cover_image',
+                            file: file!,
+                          );
+                          print('Response: $response');
+                          if (response['success'] || response != null) {
+                            //final newCoverImage = response['data']['file_name'];
+                            await authProvider.refreshUserInfo(context);
+                          }
                         }
                       },
                     ),
-                    /*Image.asset(
-                      'assets/sailorHat.png',
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.fitWidth,
-                    ),*/
                   ),
                   const SizedBox(width: 10),
                   Expanded(

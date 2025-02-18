@@ -2,22 +2,43 @@ import 'package:flutter/material.dart';
 import 'package:seaofsea/utils/theme_selector.dart';
 
 class MyAppBar extends AppBar {
-  // ignore: use_super_parameters
-  MyAppBar(
-      {super.key,
-      String? title,
-      List<String> hideIcons = const [],
-      Color? backgroundColor,
-      Map<String, VoidCallback>? overrideActions})
-      : super(
+  MyAppBar({
+    super.key,
+    String? title,
+    List<String> hideIcons = const [],
+    Color? backgroundColor,
+    Map<String, VoidCallback>? overrideActions,
+  }) : super(
           elevation: 4,
           title: Text('SeaOfSea - ${title ?? ""}'),
           backgroundColor: backgroundColor,
           actions: [
-            const ThemeSelector(),
+            if (overrideActions != null)
+              ...overrideActions.entries.map(
+                (entry) => IconButton(
+                  icon: Icon(_getIconFromKey(entry.key)),
+                  onPressed: entry.value,
+                ),
+              )
+            else if (!hideIcons.contains('theme'))
+              const ThemeSelector(),
           ],
         );
+
+  static IconData _getIconFromKey(String key) {
+    switch (key) {
+      case 'settings':
+        return Icons.settings;
+      case 'logout':
+        return Icons.exit_to_app;
+      case 'profile':
+        return Icons.person;
+      default:
+        return Icons.help_outline;
+    }
+  }
 }
+
 /*
 class MyAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? title;

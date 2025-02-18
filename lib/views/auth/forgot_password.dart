@@ -7,7 +7,7 @@ import 'package:seaofsea/utils/quotes.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
-import 'package:seaofsea/vievs/auth/auth_page.dart';
+import 'package:seaofsea/views/auth/auth_page.dart';
 import 'package:seaofsea/widgets/custom_app_bar.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';

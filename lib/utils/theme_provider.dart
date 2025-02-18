@@ -14,8 +14,8 @@ class ThemeProvider with ChangeNotifier {
 
   Future<void> toggleTheme() async {
     _isDarkMode = !_isDarkMode;
-    notifyListeners();
-    await _saveThemeToPreferences();
+    await _saveThemeToPreferences(); // ✅ Önce kaydet
+    notifyListeners(); // ✅ Sonra UI güncelle
   }
 
   Future<void> _loadThemeFromPreferences() async {

@@ -10,6 +10,7 @@ class ApiManager {
   final String? token;
   final String baseUrl;
   final String baseAddress;
+  int _retryCount = 0;
 
   ApiManager(
     this.token, {
@@ -18,6 +19,28 @@ class ApiManager {
   });
 
   factory ApiManager.empty() => ApiManager(null);
+  String showImage(String imagePath, bool asset) {
+    if (asset) {
+      return 'assets/$imagePath';
+    }
+    return '${baseUrl.endsWith('/') ? baseUrl : '$baseUrl/'}$imagePath';
+  }
+
+  Future<void> testHeaderRequest(BuildContext context) async {
+    final secureStorage = SecureStorage();
+    final authToken = await secureStorage.readSecureData('authToken');
+
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $authToken',
+    };
+
+    final uri = Uri.parse('http://localhost/test/test_headers.php');
+
+    final response = await http.get(uri, headers: headers);
+
+    debugPrint('📡 Response Body: ${response.body}');
+  }
 
   Future<dynamic> request(
     BuildContext context, {
@@ -27,18 +50,31 @@ class ApiManager {
     Map<String, dynamic>? queryParams,
   }) async {
     final secureStorage = SecureStorage();
-    final authToken = await secureStorage.readSecureData('authToken');
-    final uri = Uri.parse('$baseUrl$baseAddress?endpoint=$endpoint');
 
-    final headers = {
+    String? authToken = await secureStorage.readSecureData('authToken');
+
+    if (authToken == null || authToken.isEmpty) {
+      debugPrint('⚠️ Hata: authToken null veya boş (Login gereklidir).');
+    } else {
+      debugPrint(
+          '📡 Kullanılan Auth Token: $authToken'); // 📌 Token her zaman gösterilecek
+    }
+
+    Uri uri = Uri.parse('$baseUrl$baseAddress?endpoint=$endpoint');
+
+    if (queryParams != null && queryParams.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParams);
+    }
+
+    Map<String, String> headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $authToken',
     };
 
+    debugPrint('📡 Request headers: $headers');
+
     try {
       http.Response response;
-
-      // HTTP yöntemi seçimi
       switch (method.toUpperCase()) {
         case 'POST':
           response =
@@ -48,38 +84,42 @@ class ApiManager {
           response = await http.get(uri, headers: headers);
           break;
         default:
-          throw Exception('Unsupported HTTP method: $method');
+          throw Exception('❌ Unsupported HTTP method: $method');
       }
-      // Eğer yanıt 401 ise token yenilemeyi dene
-      if (response.statusCode == 401) {
-        // ignore: use_build_context_synchronously
+
+      if (response.statusCode == 401 && _retryCount < 2) {
+        // 📌 Retry sınırı 3'e çıktı
+        _retryCount++;
         final refreshSuccessful = await _refreshToken(context);
+
         if (refreshSuccessful) {
-          // Yeni token ile isteği tekrar dene
-          return request(
-            // ignore: use_build_context_synchronously
-            context,
-            endpoint: endpoint,
-            method: method,
-            body: body,
-            queryParams: queryParams,
-          );
+          authToken = await secureStorage
+              .readSecureData('authToken'); // 📌 Yeni token hemen kullanılmalı
+          headers['Authorization'] = 'Bearer $authToken';
+
+          debugPrint(
+              "📌 Yeni Token ile Request Tekrar Gönderiliyor: $authToken");
+
+          return request(context,
+              endpoint: endpoint,
+              method: method,
+              body: body,
+              queryParams: queryParams);
         } else {
-          // Token yenileme başarısızsa oturumu kapat
           final authProvider =
-              // ignore: use_build_context_synchronously
               Provider.of<AuthProvider>(context, listen: false);
-          // ignore: use_build_context_synchronously
           await authProvider.logout(context);
           throw Exception('Session expired. Please log in again.');
         }
       }
 
-      // ignore: use_build_context_synchronously
-      return _handleResponse(context, response); // Yanıtı işle
+      if (context.mounted) {
+        return _handleResponse(context, response);
+      }
     } catch (e) {
-      // ignore: use_build_context_synchronously
-      _showSnackbar(context, 'Request failed: $e', isSuccess: false);
+      if (context.mounted) {
+        _showSnackbar(context, 'Request failed: $e', isSuccess: false);
+      }
       rethrow;
     }
   }
@@ -110,12 +150,12 @@ class ApiManager {
 
   bool _isSnackbarVisible = false;
   void _showSnackbar(BuildContext context, String message,
-      {bool isSuccess = true}) {
+      {bool isSuccess = true}) async {
     if (_isSnackbarVisible) return;
 
     _isSnackbarVisible = true;
-    {
-      ScaffoldMessenger.of(context)
+    if (context.mounted) {
+      await ScaffoldMessenger.of(context)
           .showSnackBar(
             SnackBar(
               content: Text(
@@ -129,8 +169,8 @@ class ApiManager {
                   isSuccess ? Colors.grey.shade900 : Colors.red.shade100,
             ),
           )
-          .closed
-          .then((value) => _isSnackbarVisible = false);
+          .closed;
+      _isSnackbarVisible = false;
     }
   }
 
@@ -138,62 +178,92 @@ class ApiManager {
     BuildContext context, {
     required String endpoint,
     required File file,
+    Map<String, String>? meta,
   }) async {
     final secureStorage = SecureStorage();
-    final authToken = await secureStorage.readSecureData('authToken');
-    final userId = await secureStorage.readSecureData('userId');
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    // Kullanıcı ID'yi çek, boşsa AuthProvider'ı güncelle
+    String? userId = await secureStorage.readSecureData('userId');
+    if (userId == null || userId.isEmpty) {
+      // ✅ DÜZENLENDİ: Kullanıcı ID boşsa AuthProvider güncelleniyor
+      debugPrint("User ID is empty, refreshing user info...");
+      await authProvider.refreshUserInfo(context);
+      userId = await secureStorage.readSecureData('userId');
+    }
+
+    if (userId == null) {
+      debugPrint('Error: User ID is still null.');
+      return null;
+    }
+
     final uri = Uri.parse('$baseUrl$baseAddress?endpoint=$endpoint');
+    final authToken = await secureStorage.readSecureData('authToken') ?? '';
 
     final headers = {
+      'Content-Type': 'application/json',
       'Authorization': 'Bearer $authToken',
     };
-    print('Headers: $userId');
+
     try {
       final request = http.MultipartRequest('POST', uri)
         ..headers.addAll(headers)
-        ..fields['userId'] = userId.toString()
+        ..fields['user_id'] = userId
         ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      meta?.forEach((key, value) {
+        request.fields[key] = value;
+      });
 
       debugPrint('Request Body: ${request.fields}');
 
       final response = await request.send();
+      if (response.statusCode != 200) {
+        // ✅ DÜZENLENDİ: Hata yönetimi eklendi
+        debugPrint('Upload failed: ${response.reasonPhrase}');
+        return null;
+      }
       final responseBody = await response.stream.bytesToString();
+      final responseData = jsonDecode(responseBody);
 
       debugPrint('Response Body: $responseBody');
 
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(responseBody);
-        print('Response Data: $responseData');
-        if (responseData['success']) {
-          _showSnackbar(
-            // ignore: use_build_context_synchronously
-            context,
-            responseData['message'] ?? 'File uploaded successfully!',
-            isSuccess: true,
-          );
-          print('File uploaded successfully! ${responseData['data']}');
-          return responseData;
-        } else {
-          throw Exception(responseData['message'] ?? 'Upload failed.');
-        }
+      if (response.statusCode == 200 && responseData['success']) {
+        final newImage = responseData['data']['file_name'];
+        debugPrint('New Image: $newImage');
+
+        // Görsel güncellendi, şimdi AuthProvider'ı ve SecureStorage'ı güncelleyelim
+        await secureStorage.writeSecureData(
+            endpoint.contains('profile') ? 'profileImage' : 'coverImage',
+            newImage);
+        await authProvider.refreshUserInfo(context);
+        imageCache.clear();
+        imageCache.clearLiveImages();
+
+        return responseData;
       } else {
-        throw Exception('Failed to upload file: ${response.statusCode}');
+        debugPrint('Upload failed: ${responseData['message']}');
+        return null;
       }
     } catch (e) {
-      print('Error uploading file: $e');
-      // ignore: use_build_context_synchronously
-      _showSnackbar(context, 'Error uploading file: $e', isSuccess: false);
+      debugPrint('Error uploading file: $e');
+      return null;
     }
   }
 
   Future<bool> _refreshToken(BuildContext context) async {
     final secureStorage = SecureStorage();
     final refreshToken = await secureStorage.readSecureData('refreshToken');
+    AuthProvider _authProvider = Provider.of<AuthProvider>(context);
 
-    if (refreshToken == null) {
-      debugPrint('No refresh token found.');
+    debugPrint("🔄 Refresh Token İşlemi Başladı.");
+    debugPrint("🔄 Mevcut Refresh Token: $refreshToken");
+
+    if (refreshToken == null || refreshToken.isEmpty) {
+      debugPrint("❌ Refresh token bulunamadı!");
       return false;
     }
+
     final uri = Uri.parse('$baseUrl$baseAddress?endpoint=refresh_token');
     try {
       final response = await http.post(
@@ -202,18 +272,37 @@ class ApiManager {
         body: jsonEncode({'refresh_token': refreshToken}),
       );
 
+      debugPrint("🔄 Refresh Token Yanıtı: ${response.body}");
+
       final responseBody = jsonDecode(response.body);
 
       if (response.statusCode == 200 && responseBody['success']) {
-        final newAuthToken = responseBody['data']['auth_token'];
+        final newAuthToken = responseBody['data']?['access_token'];
+        final newRefreshToken = responseBody['data']?['refresh_token'];
+
+        if (newAuthToken == null || newRefreshToken == null) {
+          debugPrint("❌ Yeni token bilgileri eksik!");
+          return false;
+        }
+
+        // 📌 ✅ **Yeni tokenları hemen sakla**
         await secureStorage.writeSecureData('authToken', newAuthToken);
+        await secureStorage.writeSecureData('refreshToken', newRefreshToken);
+        
+        _authProvider.refreshUserInfo(context);
+
+        debugPrint("✅ Yeni Access Token Güncellendi: $newAuthToken");
+        debugPrint("✅ Yeni Refresh Token Güncellendi: $newRefreshToken");
+
+        // 📌 **Sadece başarı olduğunda sıfırla**
+        _retryCount = 0;
         return true;
       } else {
-        debugPrint('Token refresh failed: ${responseBody['message']}');
+        debugPrint('❌ Refresh Token Başarısız: ${responseBody['message']}');
         return false;
       }
     } catch (e) {
-      debugPrint('Error refreshing token: $e');
+      debugPrint('❌ Refresh Token Hatası: $e');
       return false;
     }
   }

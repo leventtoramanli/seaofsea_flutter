@@ -5,7 +5,7 @@ import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/quotes.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
-import 'package:seaofsea/vievs/terms.dart';
+import 'package:seaofsea/views/terms.dart';
 import 'package:seaofsea/widgets/custom_app_bar.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';

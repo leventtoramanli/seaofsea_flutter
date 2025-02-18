@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ColorBlindnessProvider with ChangeNotifier {
   bool _isEffectOn = false;
   double _blurLevel = 0.0;
-  String _currentEffect = 'Protanopia';
+  String _currentEffect = protanopia;
 
   static const String protanopia = 'Protanopia';
   static const String deuteranopia = 'Deuteranopia';
@@ -22,31 +22,95 @@ class ColorBlindnessProvider with ChangeNotifier {
 
   /// Tritanopia renk filtresi
   static const ColorFilter _protanopiaFilter = ColorFilter.matrix([
-    0.56667, 0.43333, 0.0, 0.0, 0.0,
-    0.55833, 0.44167, 0.0, 0.0, 0.0,
-    0.0, 0.24167, 0.75833, 0.0, 0.0,
-    0.0, 0.0, 0.0, 1.0, 0.0,
+    0.56667,
+    0.43333,
+    0.0,
+    0.0,
+    0.0,
+    0.55833,
+    0.44167,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.24167,
+    0.75833,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
   ]);
 
   static const ColorFilter _deuteranopiaFilter = ColorFilter.matrix([
-    0.625, 0.375, 0.0, 0.0, 0.0,
-    0.7, 0.3, 0.0, 0.0, 0.0,
-    0.0, 0.3, 0.7, 0.0, 0.0,
-    0.0, 0.0, 0.0, 1.0, 0.0,
+    0.625,
+    0.375,
+    0.0,
+    0.0,
+    0.0,
+    0.7,
+    0.3,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.3,
+    0.7,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
   ]);
 
   static const ColorFilter _tritanopiaFilter = ColorFilter.matrix([
-    0.95, 0.05, 0.0, 0.0, 0.0,
-    0.0, 0.43, 0.56, 0.0, 0.0,
-    0.0, 0.47, 0.53, 0.0, 0.0,
-    0.0, 0.0, 0.0, 1.0, 0.0,
+    0.95,
+    0.05,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.43,
+    0.56,
+    0.0,
+    0.0,
+    0.0,
+    0.47,
+    0.53,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
   ]);
 
   static const ColorFilter _achromatopsiaFilter = ColorFilter.matrix([
-    0.299, 0.587, 0.114, 0.0, 0.0,
-    0.299, 0.587, 0.114, 0.0, 0.0,
-    0.299, 0.587, 0.114, 0.0, 0.0,
-    0.0, 0.0, 0.0, 1.0, 0.0,
+    0.299,
+    0.587,
+    0.114,
+    0.0,
+    0.0,
+    0.299,
+    0.587,
+    0.114,
+    0.0,
+    0.0,
+    0.299,
+    0.587,
+    0.114,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
   ]);
 
   static const ColorFilter _noFilter =
@@ -73,23 +137,23 @@ class ColorBlindnessProvider with ChangeNotifier {
   /// Efekti aç/kapat
   Future<void> toggleEffect() async {
     _isEffectOn = !_isEffectOn;
-    notifyListeners();
     await _saveSettingsToPreferences();
+    notifyListeners();
   }
 
   /// Efekti değiştir
   Future<void> setEffect(String effect) async {
     _currentEffect = effect;
-    notifyListeners();
     await _saveSettingsToPreferences();
+    notifyListeners();
   }
 
   /// Blur seviyesini ayarla
   Future<void> setBlurLevel(double level) async {
     _blurLevel = level;
     _currentEffect = blur;
-    notifyListeners();
     await _saveSettingsToPreferences();
+    notifyListeners();
   }
 
   /// Ayarları SharedPreferences'dan yükle

@@ -50,10 +50,10 @@ class CustomScaffold extends StatelessWidget {
                 return Row(
                   children: [
                     TextButton.icon(
-                      onPressed: item['onTap'],
-                      icon: Icon(item['icon'], color: Colors.white),
+                      onPressed: () => item.onTap!(context), // ✅ Hata düzeltildi
+                      icon: Icon(item.icon, color: Colors.white), // ✅ Map kaldırıldı
                       label: Text(
-                        item['label'],
+                        item.label, // ✅ Map kaldırıldı
                         style: const TextStyle(color: Colors.white),
                       ),
                     ),
@@ -70,9 +70,9 @@ class CustomScaffold extends StatelessWidget {
                 );
               } else {
                 return IconButton(
-                  icon: Icon(item['icon']),
-                  tooltip: item['label'],
-                  onPressed: item['onTap'],
+                  icon: Icon(item.icon), // ✅ Map kaldırıldı
+                  tooltip: item.label, // ✅ Map kaldırıldı
+                  onPressed: () => item.onTap!(context), // ✅ Hata düzeltildi
                 );
               }
             // ignore: unnecessary_to_list_in_spreads
@@ -102,9 +102,9 @@ class CustomScaffold extends StatelessWidget {
                   ),
                   ...menuProvider.getMenuItems(context).map((item) {
                     return ListTile(
-                      leading: Icon(item['icon']),
-                      title: Text(item['label']),
-                      onTap: item['onTap'],
+                      leading: Icon(item.icon), // ✅ Map kaldırıldı
+                      title: Text(item.label), // ✅ Map kaldırıldı
+                      onTap: () => item.onTap!(context), // ✅ Hata düzeltildi
                     );
                   // ignore: unnecessary_to_list_in_spreads
                   }).toList(),

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:seaofsea/main.dart';
-import 'package:seaofsea/vievs/admin_dashboard.dart';
-import 'package:seaofsea/vievs/auth/auth_page.dart';
-import 'package:seaofsea/vievs/home_page.dart';
-import 'package:seaofsea/vievs/user_settings/settings_page.dart';
+import 'package:seaofsea/views/admin_dashboard.dart';
+import 'package:seaofsea/views/auth/auth_page.dart';
+import 'package:seaofsea/views/home_page.dart';
+import 'package:seaofsea/views/user_settings/settings_page.dart';
 
 Route<dynamic>? generateRoute(RouteSettings settings) {
   switch (settings.name) {
@@ -20,7 +20,7 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
     case '/admin':
       return MaterialPageRoute(builder: (context) => const AdminDashboard());
     case '/settings':
-      return MaterialPageRoute(builder: (context) => const SettingsPage());
+      return MaterialPageRoute(builder: (context) => SettingsPage(arguments: settings.arguments));
     default:
       return MaterialPageRoute(
           builder: (context) => const Center(

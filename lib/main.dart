@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/services/providers.dart';
@@ -8,21 +9,24 @@ import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/color_blindness_provider.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
-import 'package:seaofsea/vievs/auth/auth_page.dart';
-import 'package:seaofsea/vievs/home_page.dart';
+import 'package:seaofsea/views/auth/auth_page.dart';
+import 'package:seaofsea/views/home_page.dart';
 
 class MyHttpOverrides extends HttpOverrides {
   @override
   HttpClient createHttpClient(SecurityContext? context) {
     return super.createHttpClient(context)
-      ..badCertificateCallback =
-          (X509Certificate cert, String host, int port) => true;
+      ..badCertificateCallback = kDebugMode
+          ? (X509Certificate cert, String host, int port) => true
+          : null;
   }
 }
 
 void main() {
   if (const bool.fromEnvironment('dart.vm.product') == false) {
-    HttpOverrides.global = MyHttpOverrides();
+    if (!kReleaseMode) {
+      HttpOverrides.global = MyHttpOverrides();
+    }
   }
   runApp(
     MultiProvider(
