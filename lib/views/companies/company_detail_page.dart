@@ -6,12 +6,14 @@ import 'dart:io';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/permission_gate.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/views/companies/contact_field_definitions.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';
+import 'package:seaofsea/widgets/custom_image_picker.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
 import 'package:seaofsea/widgets/online_images.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -776,27 +778,144 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
     );
   }
 
+  Future<void> _updateCompanyLogo(String companyId, File imageFile) async {
+    final api = Provider.of<ApiManager>(context, listen: false);
+
+    try {
+      // 1. Görseli yükle
+      final uploadResponse = await api.uploadImage(
+        context,
+        endpoint: 'upload_image_general',
+        file: imageFile,
+        meta: {
+          'type': 'company',
+          'folder': 'images/companies/logo/',
+          'prefix': 'c_$companyId',
+          'thumb': 'true',
+          'thumbSize': '128',
+        },
+      );
+
+      if (uploadResponse != null && uploadResponse['success'] == true) {
+        final uploadedFileName = uploadResponse['data']?['file_name'];
+
+        if (uploadedFileName != null) {
+          // 2. Veritabanında şirket kaydını güncelle
+          final updateResponse = await api.post(context, 'update_company', {
+            'company_id': companyId,
+            'logo': uploadedFileName,
+          });
+
+          if (updateResponse['success'] == true) {
+            debugPrint('✅ Logo updated successfully.');
+            setState(() {
+              widget.companyData['logo'] = uploadedFileName;
+            });
+          } else {
+            debugPrint('❌ Failed to update company with new logo.');
+          }
+        }
+      } else {
+        debugPrint('❌ Upload failed or no file_name.');
+      }
+    } catch (e) {
+      debugPrint('❌ Error updating logo: $e');
+    }
+  }
+Widget _buildLogoWithEditButton() {
+  final apiManager = Provider.of<ApiManager>(context, listen: false);
+  final companyId = widget.companyData['id'];
+  final existingLogo = widget.companyData['logo'] ?? '';
+  final logoUrl = existingLogo.isNotEmpty
+      ? '${apiManager.baseUrl}/images/companies/logo/thumb/$existingLogo'
+      : null;
+
+  return Stack(
+    alignment: Alignment.bottomRight,
+    children: [
+      // 👇 Logo HERKES için görünür
+      Container(
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(40),
+          border: Border.all(color: Colors.grey.shade300, width: 2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: logoUrl != null
+            ? Image.network(
+                logoUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+              )
+            : const CircleAvatar(
+                radius: 40,
+                backgroundColor: Colors.grey,
+                child: Icon(Icons.business, color: Colors.white, size: 40),
+              ),
+      ),
+      // 👇 Sadece yetkililere edit butonu
+      PermissionGate(
+        permissionCode: 'company.update_logo',
+        entityId: companyId,
+        child: GestureDetector(
+          onTap: () => _pickAndUploadNewLogo(companyId),
+          child: Container(
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black54,
+            ),
+            padding: const EdgeInsets.all(6),
+            child: const Icon(Icons.edit, color: Colors.white, size: 16),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+Future<void> _pickAndUploadNewLogo(int companyId) async {
+  final picker = ImagePicker();
+  final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+  if (pickedFile == null) return;
+
+  final file = File(pickedFile.path);
+  final apiManager = Provider.of<ApiManager>(context, listen: false);
+
+  final response = await apiManager.uploadImage(
+    context,
+    endpoint: 'upload_image_general',
+    file: file,
+    meta: {
+      'type': 'company',
+      'folder': 'images/companies/logo/',
+      'prefix': 'c_$companyId',
+      'thumb': 'true',
+      'thumbSize': '128',
+    },
+  );
+
+  if (response != null && response['success'] == true) {
+    final fileName = response['data']?['file_name'];
+    if (fileName != null) {
+      await apiManager.post(context, 'update_company', {
+        'company_id': companyId.toString(),
+        'logo': fileName,
+      });
+      setState(() {
+        widget.companyData['logo'] = fileName;
+      });
+    }
+  }
+}
+
+
   Widget _buildHeader(BuildContext context, bool isDesktop, bool isTablet) {
-    final hasLogo = widget.companyData['logo'] != null &&
-        widget.companyData['logo'].toString().isNotEmpty;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        hasLogo
-            ? OnlineImage(
-                imagePath: 'images/companies/logo/thumb/',
-                imageName: widget.companyData['logo'],
-                sizeW: 80,
-                rounded: true,
-                border: true,
-              )
-            : CircleAvatar(
-                radius: 40,
-                backgroundColor: Colors.grey[300],
-                child:
-                    const Icon(Icons.business, size: 40, color: Colors.white),
-              ),
+        _buildLogoWithEditButton(),
         Column(
           children: [
             if ((isDesktop || isTablet) && (isAdmin || isEditor))
