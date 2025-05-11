@@ -1,278 +1,261 @@
-import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
+// ignore_for_file: library_private_types_in_public_api, prefer_final_fields
+
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
+// ignore: unused_import
 import 'package:seaofsea/utils/auth_provider.dart';
-import 'package:seaofsea/utils/secure_storage.dart';
+import 'package:seaofsea/utils/theme_provider.dart';
+import 'package:seaofsea/widgets/custom_form_field.dart';
 import 'package:seaofsea/widgets/custom_image_picker.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  _ProfilePageState createState() => _ProfilePageState();
 }
 
 class _ProfilePageState extends State<ProfilePage> {
   // ignore: unused_field
+  File? _profileImage;
+  // ignore: unused_field
   File? _coverImage;
-  bool _isUploading = false;
-  bool _isLoading = true;
-  late final ApiManager _apiManager;
-  late final AuthProvider _authProvider;
+  TextEditingController _nameController = TextEditingController();
+  TextEditingController _surnameController = TextEditingController();
+  TextEditingController _emailController = TextEditingController();
+  TextEditingController _bioController = TextEditingController();
+  Map<String, dynamic> infoData = {};
+  bool isUpdating = false;
+
+  Future<void> fetchUserData() async {
+    final apiManager = Provider.of<ApiManager>(context, listen: false);
+    try {
+      final response = await apiManager.get(context, 'get_user_info');
+
+      if (response != null && response['success'] == true) {
+        if (mounted) {
+          setState(() {
+            infoData = response['data'] ?? {};
+            _nameController.text = infoData['name'] ?? '';
+            _surnameController.text = infoData['surname'] ?? '';
+            _emailController.text = infoData['email'] ?? '';
+            _bioController.text = infoData['bio'] ?? '';
+          });
+        }
+      } else {
+        debugPrint(
+            '❌ API Hatası: ${response?['message'] ?? 'Bilinmeyen hata'}');
+      }
+    } catch (e, stacktrace) {
+      debugPrint('❌ API Hatası: $e');
+      debugPrint(stacktrace.toString());
+    }
+  }
+
+  Future<void> updateUserData() async {
+    setState(() => isUpdating = true);
+    final apiManager = Provider.of<ApiManager>(context, listen: false);
+    final response = await apiManager.post(context, 'update_user', {
+      'user_id': infoData['id'],
+      'name': _nameController.text,
+      'surname': _surnameController.text,
+      'email': _emailController.text,
+      'bio': _bioController.text,
+    });
+    setState(() => isUpdating = false);
+    if (response != null && response['success'] == true) {
+      await fetchUserData(); // Güncellenmiş veriyi tekrar çek
+      // ignore: use_build_context_synchronously
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Profile updated successfully!")),
+      );
+    } else {
+      debugPrint(
+          "❌ Güncelleme başarısız: ${response?['message'] ?? 'Unknown Error'}");
+    }
+  }
+
+  void _onImagePicked(File? file, String? base64, String type) async {
+    final apiManager = Provider.of<ApiManager>(context, listen: false);
+    final userId = infoData['id'];
+
+    if (file != null && userId != null) {
+      await apiManager.uploadImage(
+        context,
+        endpoint: 'upload_image',
+        file: file,
+        meta: {'type': type, 'user_id': userId.toString()},
+      );
+      await fetchUserData();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _apiManager = Provider.of<ApiManager>(context, listen: false);
-    _authProvider = Provider.of<AuthProvider>(context, listen: false);
-    _refreshUserData();
-  }
-
-  Future<void> _refreshUserData() async {
-    if (!_authProvider.isLoggedIn) {
-      debugPrint('User not logged in, skipping refresh.');
-      setState(() => _isLoading = false);
-      return;
-    }
-    try {
-      await _authProvider.refreshUserInfo(context);
-      debugPrint('User info refreshed successfully.');
-      setState(() => _isLoading = false);
-      _checkUserImage(context); // ✅ Kullanıcı verisi geldikten sonra çağırıyoruz
-    } catch (e) {
-      debugPrint('Failed to refresh user info: $e');
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _checkUserImage(BuildContext context) async {
-  if (_authProvider.userInfo == null || !_authProvider.isLoggedIn) {
-    debugPrint('Skipping image check. User not logged in.');
-    return;
-  }
-
-  final userInfo = _authProvider.userInfo;
-  final userId = userInfo?['id'];
-  debugPrint('Returned: ${jsonEncode(userInfo)}');
-
-  if (userId == null) {
-    debugPrint('Error: user_id is null before checking image!');
-    return;
-  }
-
-  debugPrint('Checking cover image for user ID: $userId');
-
-  try {
-    final response = await _apiManager.request(
-      context,
-      endpoint: 'check_cover_images',
-      method: 'POST',
-      body: {'user_id': userId},
-    );
-
-    debugPrint('🔍 API Yanıtı: ${response.toString()}');
-
-    if (response == null) {
-      throw Exception('API response is null');
-    }
-
-    if (response is! Map<String, dynamic>) {
-      debugPrint('⚠️ API yanıtı JSON formatında değil. Response: $response');
-      return;
-    }
-
-    if (!response.containsKey('success')) {
-      debugPrint('⚠️ API yanıtında success anahtarı bulunamadı.');
-      return;
-    }
-
-    if (!response['success']) {
-      debugPrint('Image check failed: ${response['message']}');
-    } else {
-      debugPrint('Image check successful: ${response['message']}');
-
-      final newCoverImage = response['data']['cover_image'] ?? '';
-      if (newCoverImage.isNotEmpty) {
-        debugPrint("📌 Yeni Cover Image: $newCoverImage");
-
-        // ✅ Secure Storage Güncelle
-        await SecureStorage().writeSecureData('coverImage', newCoverImage);
-
-        // ✅ AuthProvider'ı Güncelle
-        _authProvider.refreshUserInfo(context);
-
-        // ✅ Image Cache Temizle
-        imageCache.clear();
-        imageCache.clearLiveImages();
-      }
-    }
-  } catch (e) {
-    debugPrint('🛑 Error while checking user image: $e');
-  }
-}
-
-
-
-  Future<String?> uploadImage(File file) async {
-    final apiManager = Provider.of<ApiManager>(context, listen: false);
-    final response = await apiManager.uploadImage(
-      context,
-      endpoint: 'upload_cover_image',
-      file: file,
-    );
-    if (response['success'] == true) {
-      await _authProvider.refreshUserInfo(context);
-      return response['data']['file_name'];
-    }
-    return null;
-  }
-  Future<void> updateDatabase(String fileName) async {
-    final apiManager = Provider.of<ApiManager>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final userId = authProvider.userInfo?['id'];
-    print('Update function called with file name: $fileName');
-    final response = await apiManager.post(
-      context,
-      'upload_cover_image',
-      {
-        'user_id': userId,
-        'file_name': fileName,
-      },
-    );
-
-    if (response['success'] == true) {
-      debugPrint('Database updated successfully: ${response['message']}');
-    } else {
-      debugPrint('Database update failed: ${response['message']}');
-    }
+    fetchUserData();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final apiManager = ApiManager.empty();
-    final userId = authProvider.userInfo?['id'];
-    final userName = authProvider.userInfo!['name'];
-    final userSurName = authProvider.userInfo!['surname'];
+    final apiManager = Provider.of<ApiManager>(context, listen: false);
+    final themeProvider = Provider.of<ThemeProvider>(context);
 
-    final coverImageUrl = 'images/user/covers/${authProvider.userInfo!['cover_image']}';
-    //final isAssetImage = coverImageUrl == null;
+    String coverImageUrl = infoData['cover_image'] != null
+        ? "${apiManager.baseUrl}/images/user/covers/${infoData['cover_image']}"
+        : "assets/cover.jpg";
+
+    String userImageUrl = infoData['user_image'] != null
+        ? "${apiManager.baseUrl}/images/user/user/${infoData['user_image']}"
+        : "assets/sailorHat.png";
 
     return Scaffold(
       body: SingleChildScrollView(
-        child: Center(
-          child: Column(
-            children: [
-              CustomImagePicker(
-                aspectRatio: 19 / 3,
-                meta: {
-                  'Publisher': 'Sea of Sea',
-                  'Description': 'Cover Image - $userName $userSurName',
-                  'Title': 'Cover Image - $userName $userSurName',
-                  'Author': 'Sea of Sea',
-                  'UserId': userId.toString(),
-                },
-                existingImageUrl: coverImageUrl != null
-                    ? '${apiManager.showImage(coverImageUrl, false)}'
-                    : null,
-                onImagePicked: (file, String? base64Image) async {
-                  if (file != null || base64Image != null) {
-                    // Yükleme işlemini başlat
-                    final apiManager =
-                        Provider.of<ApiManager>(context, listen: false);
-                    final response = await apiManager.uploadImage(
-                      context,
-                      endpoint: 'upload_cover_image',
-                      file: file!,
-                    );
-                    print('Response: $response');
-                    if (response['success'] || response != null) {
-                      //final newCoverImage = response['data']['file_name'];
-                      await authProvider.refreshUserInfo(context);
-                    }
-                  }
-                },
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12.0),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black54,
-                            blurRadius: 5,
-                            offset: Offset(0, 0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(0),
+                      child: CustomImagePicker(
+                        aspectRatio: 19 / 3,
+                        existingImageUrl: coverImageUrl,
+                        meta: const {'type': 'cover'},
+                        onImagePicked: (file, base64) =>
+                            _onImagePicked(file, base64, 'cover'),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withAlpha((0.8 * 255).round()),
+                            ],
                           ),
-                        ]),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Transform.translate(
+              offset: const Offset(10, -50),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white,
+                      width: 3,
+                    ),
+                  ),
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.black,
                     child: CustomImagePicker(
                       aspectRatio: 1,
+                      existingImageUrl: userImageUrl,
+                      meta: const {'type': 'user'},
+                      onImagePicked: (file, base64) =>
+                          _onImagePicked(file, base64, 'user'),
                       iwidth: 100,
                       iheight: 100,
-                      iradius: 12.0,
-                      meta: {
-                        'Publisher': 'Sea of Sea',
-                        'Description': 'Cover Image - $userName $userSurName',
-                        'Title': 'Cover Image - $userName $userSurName',
-                        'Author': 'Sea of Sea',
-                        'UserId': userId.toString(),
-                      },
-                      existingImageUrl: coverImageUrl != null
-                          ? '${apiManager.showImage(coverImageUrl, false)}'
-                          : null,
-                      onImagePicked: (file, String? base64Image) async {
-                        if (file != null || base64Image != null) {
-                          // Yükleme işlemini başlat
-                          final apiManager =
-                              Provider.of<ApiManager>(context, listen: false);
-                          final response = await apiManager.uploadImage(
-                            context,
-                            endpoint: 'upload_cover_image',
-                            file: file!,
-                          );
-                          print('Response: $response');
-                          if (response['success'] || response != null) {
-                            //final newCoverImage = response['data']['file_name'];
-                            await authProvider.refreshUserInfo(context);
-                          }
-                        }
-                      },
+                      iradius: 50,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Levent TORAMANLI',
-                          style: Theme.of(context).textTheme.headlineSmall,
+                ),
+              ),
+            ),
+            Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha((0.2 * 255).round()),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withAlpha((0.2 * 255).round()),
+                          ),
                         ),
-                        Text(
-                          'Sailor',
-                          style: Theme.of(context).textTheme.bodyLarge,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CustomFormField(
+                              controller: _nameController,
+                              themeProvider: themeProvider,
+                              label: "Full Name",
+                              hint: "Enter your full name",
+                              icon: const Icon(Icons.person),
+                              validationMessage: "Name is required",
+                            ),
+                            const SizedBox(height: 10),
+                            CustomFormField(
+                              controller: _surnameController,
+                              themeProvider: themeProvider,
+                              label: "Surname",
+                              hint: "Enter your surname",
+                              icon: const Icon(Icons.person_outline),
+                              validationMessage: "Surname is required",
+                            ),
+                            const SizedBox(height: 10),
+                            CustomFormField(
+                              controller: _emailController,
+                              themeProvider: themeProvider,
+                              label: "Email",
+                              hint: "Enter your E-Mail",
+                              icon: const Icon(Icons.email),
+                              validationMessage: "E-Mail is required",
+                              isEmail: true,
+                            ),
+                            const SizedBox(height: 20),
+                            CustomFormField(
+                              controller: _bioController,
+                              themeProvider: themeProvider,
+                              label: "About",
+                              hint: "Tell us about yourself",
+                              icon: const Icon(Icons.info_outline),
+                              validationMessage: "Please enter something",
+                              maxLines: 3,
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton(
+                              onPressed: isUpdating ? null : updateUserData,
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 50),
+                                backgroundColor: Colors.blueAccent,
+                              ),
+                              child: isUpdating
+                                  ? const CircularProgressIndicator(
+                                      color: Colors.white)
+                                  : const Text("Save Changes"),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                  if (_isUploading) const CircularProgressIndicator()
-                ],
-              ),
-              Divider(
-                thickness: 2,
-                color: Colors.grey[300],
-              ),
-            ],
-          ),
+                )),
+          ],
         ),
       ),
     );

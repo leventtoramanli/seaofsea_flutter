@@ -22,4 +22,19 @@ class RoleManager {
     const roleHierarchy = [anonymous, user, moderator, admin];
     return roleHierarchy.indexOf(role) >= roleHierarchy.indexOf(requiredRole);
   }
+
+  /// **🔍 API için erişim kontrolü**
+  static bool isAuthorized(String role, String endpoint) {
+    final restrictedEndpoints = {
+      'update_user': user,
+      'upload_image': user,
+      'admin_dashboard': admin,
+    };
+
+    if (!restrictedEndpoints.containsKey(endpoint)) {
+      return true; // Genel erişime açık endpointler
+    }
+
+    return hasAccess(role, restrictedEndpoints[endpoint]!);
+  }
 }

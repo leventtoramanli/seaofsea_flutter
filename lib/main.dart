@@ -23,6 +23,7 @@ class MyHttpOverrides extends HttpOverrides {
 }
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   if (const bool.fromEnvironment('dart.vm.product') == false) {
     if (!kReleaseMode) {
       HttpOverrides.global = MyHttpOverrides();
@@ -105,15 +106,8 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
 
-    return MaterialApp(
-      theme: lightTheme,
-      darkTheme: darkTheme,
-      themeMode: context.watch<ThemeProvider>().themeMode,
-      home: Scaffold(
-        body: authProvider.isLoggedIn
-            ? const HomePage()
-            : const AuthPage(mode: AuthMode.login),
-      ),
-    );
+    return authProvider.isLoggedIn
+        ? const HomePage()
+        : const AuthPage(mode: AuthMode.login);
   }
 }

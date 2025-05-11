@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
+import 'package:seaofsea/views/user_settings/language_settings.dart';
+import 'package:seaofsea/views/user_settings/notificationforms.dart';
+import 'package:seaofsea/views/user_settings/privacy_settings_page.dart';
 import 'package:seaofsea/views/user_settings/profile_page.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
 
@@ -18,7 +21,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   final List<String> menuLabels = [
     'Profile',
     'Notifications',
-    'Theme',
     'Language',
     'Privacy',
     'Logout',
@@ -27,7 +29,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   final List<IconData> menuIcons = [
     Icons.person,
     Icons.notifications,
-    Icons.color_lens,
     Icons.language,
     Icons.lock,
     Icons.logout,
@@ -36,7 +37,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   final List<Widget> contentWidgets = [
     const ProfilePage(),
     const NotificationsForm(),
-    const ThemeSettings(),
     const LanguageSettings(),
     const PrivacySettings(),
     const LogoutScreen(),
@@ -122,41 +122,6 @@ class _SettingsPageState extends State<SettingsPage> with SingleTickerProviderSt
   }
 }
 
-class NotificationsForm extends StatelessWidget {
-  const NotificationsForm({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text('Notification Settings'));
-  }
-}
-
-class ThemeSettings extends StatelessWidget {
-  const ThemeSettings({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text('Theme Settings'));
-  }
-}
-
-class LanguageSettings extends StatelessWidget {
-  const LanguageSettings({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text('Language Settings'));
-  }
-}
-
-class PrivacySettings extends StatelessWidget {
-  const PrivacySettings({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text('Privacy and Security'));
-  }
-}
 
 class LogoutScreen extends StatelessWidget {
   const LogoutScreen({super.key});
@@ -182,6 +147,19 @@ class LogoutScreen extends StatelessWidget {
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Log Out', style: TextStyle(color: Colors.white)),
+          ),
+          
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: () async {
+              final authProvider = Provider.of<AuthProvider>(context, listen: false);
+              await authProvider.logout(context);
+              if (context.mounted) {
+                Navigator.pushReplacementNamed(context, '/');
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Log Out From All Devices', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

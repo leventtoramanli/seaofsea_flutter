@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:convert';
 import 'dart:math';
 
@@ -6,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/role_provider.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
+import 'package:seaofsea/views/auth/auth_page.dart';
 
 class AuthProvider with ChangeNotifier {
   String? _authToken;
@@ -49,7 +52,7 @@ class AuthProvider with ChangeNotifier {
     return deviceUUID;
   }
 
-  Future<void> login(String token, String role) async {
+  Future<void> login(BuildContext context, String token, String role) async {
     _authToken = token;
     _role = role;
     _userInfo = _decodeToken(token); // ✅ Token decode ediliyor
@@ -59,10 +62,7 @@ class AuthProvider with ChangeNotifier {
 
     // ✅ `user_id`yi hem token'dan hem de doğrudan API'den almak için güvenli kontrol
     String? userId = _userInfo?['id']?.toString();
-    if (userId == null) {
-      userId = await storage
-          .readSecureData('userId'); // Eğer daha önce kaydedilmişse al
-    }
+    userId ??= await storage.readSecureData('userId');
 
     if (userId != null) {
       await storage.writeSecureData('userId', userId);
@@ -76,20 +76,22 @@ class AuthProvider with ChangeNotifier {
     if (_userInfo != null && _userInfo!.containsKey('refresh_token')) {
       await storage.writeSecureData(
           'refreshToken', _userInfo!['refresh_token']);
+      debugPrint("✅ Refresh token kaydedildi: ${_userInfo!['refresh_token']}");
     }
   }
 
   Future<void> logout(BuildContext context, {bool allDevices = false}) async {
+    if (!context.mounted) {
+      return; // 🔥 Eğer context kullanılamıyorsa, logout'u çalıştırma
+    }
     try {
       final storage = SecureStorage();
       final refreshToken = await storage.readSecureData('refreshToken');
       final deviceUUID = await storage.readSecureData('deviceUUID');
 
       if (refreshToken != null && deviceUUID != null) {
-        // ignore: use_build_context_synchronously
         final apiManager = Provider.of<ApiManager>(context, listen: false);
         await apiManager
-            // ignore: use_build_context_synchronously
             .request(context, endpoint: 'logout', method: 'POST', body: {
           'refresh_token': refreshToken,
           'device_uuid': deviceUUID,
@@ -99,16 +101,35 @@ class AuthProvider with ChangeNotifier {
         debugPrint('No refreshToken or deviceUUID found');
       }
 
+      // ✅ SecureStorage içindeki tüm verileri temizle
       await storage.deleteSecureData('authToken');
       await storage.deleteSecureData('refreshToken');
       await storage.deleteSecureData('role');
+      await storage.deleteSecureData('userId');
+      debugPrint(
+          "✅ Logout sonrası token: ${await storage.readSecureData('authToken')}");
 
+      // ✅ AuthProvider değişkenlerini sıfırla
       _authToken = null;
       _role = null;
+      _userInfo = null;
+
+      // ✅ UI'yı güncelle
       notifyListeners();
+
+      debugPrint("✅ Kullanıcı başarıyla çıkış yaptı.");
+
+      // ✅ Kullanıcıyı login sayfasına yönlendir
+      if (context.mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+              builder: (context) => const AuthPage(mode: AuthMode.login)),
+          (route) => false,
+        );
+      }
     } catch (e) {
-      debugPrint('Error during logout: $e');
-      // ignore: use_build_context_synchronously
+      debugPrint('❌ Logout sırasında hata oluştu: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Logout failed: $e')),
@@ -122,21 +143,17 @@ class AuthProvider with ChangeNotifier {
     final refreshToken = await storage.readSecureData('refreshToken');
     try {
       if (refreshToken == null) {
-        // ignore: use_build_context_synchronously
         await logout(context);
         return;
       }
 
-      // ignore: use_build_context_synchronously
       final apiManager = Provider.of<ApiManager>(context, listen: false);
-      // ignore: use_build_context_synchronously
       final isValid = await apiManager.request(context,
           endpoint: 'check_token',
           method: 'POST',
           body: {'refresh_token': refreshToken});
 
       if (!isValid['success']) {
-        // ignore: use_build_context_synchronously
         await logout(context);
       } else {
         debugPrint('Token is valid.');
@@ -144,14 +161,11 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('Error during token validation: $e');
       if (context.mounted) {
-        // ignore: use_build_context_synchronously
         if (ScaffoldMessenger.maybeOf(context) != null) {
-          // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Token validation failed')),
           );
         }
-        // ignore: use_build_context_synchronously
         await logout(context); // Herhangi bir hata durumunda logout yap
       }
     }
@@ -199,7 +213,8 @@ class AuthProvider with ChangeNotifier {
         await secureStorage.writeSecureData('email', _userInfo?['email']);
         await secureStorage.writeSecureData('name', _userInfo?['name']);
         await secureStorage.writeSecureData('surname', _userInfo?['surname']);
-        await secureStorage.writeSecureData('coverImage', _userInfo?['cover_image']);
+        await secureStorage.writeSecureData(
+            'coverImage', _userInfo?['cover_image']);
         notifyListeners();
 
         debugPrint('✅ User info refreshed successfully: $_userInfo');

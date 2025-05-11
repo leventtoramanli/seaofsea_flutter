@@ -41,12 +41,16 @@ class MenuItemsProvider extends ChangeNotifier {
     final Map<String, Function(BuildContext)> actionHandlers = {
       'settings': (context) => navigateReplacement(context, '/settings'),
       'home': (context) => navigateReplacement(context, '/home'),
-      'logout': (context) {
+      'logout': (context) async {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        authProvider.logout(context);
-        navigateReplacement(context, '/');
+        await authProvider.logout(context);
+        if (context.mounted) {
+          navigateReplacement(context, '/');
+        }
       },
-      'profile': (context) => debugPrint('Profile tapped'),
+      'profile': (context) {
+        navigateReplacement(context, '/public_profile_page');
+      },
       'help': (context) => debugPrint('Help tapped'),
     };
 

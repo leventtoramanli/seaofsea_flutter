@@ -1,0 +1,16 @@
+{
+  "@@locale": "tr",
+  "email_notifications": "E-posta Bildirimleri",
+  "app_notifications": "Uygulama Bildirimleri",
+  "weekly_summary": "Haftalık Özet",
+  "save_settings": "Ayarları Kaydet",
+  "notification_saved": "Bildirim tercihleri kaydedildi",
+  "language": "Dil",
+  "profile": "Profil",
+  "logout": "Çıkış Yap",
+  "theme": "Tema",
+  "notifications": "Bildirimler",
+  "privacy": "Gizlilik",
+  "log_out_question": "Çıkış yapmak istediğinize emin misiniz?",
+  "log_out_all_devices": "Tüm Cihazlardan Çıkış Yap"
+}

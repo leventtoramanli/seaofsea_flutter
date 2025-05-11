@@ -14,7 +14,10 @@ class CustomFormField extends StatelessWidget {
   final bool isEmail;
   final bool isNumeric;
   final bool isDate;
+  final bool isPhone;
+  final bool isUrl;
   final BuildContext? context;
+  final int maxLines;
 
   const CustomFormField({
     super.key,
@@ -28,7 +31,10 @@ class CustomFormField extends StatelessWidget {
     this.isEmail = false,
     this.isNumeric = false,
     this.isDate = false,
+    this.isPhone = false,
+    this.isUrl = false,
     this.context,
+    this.maxLines = 1,
   });
 
   @override
@@ -57,17 +63,21 @@ class CustomFormField extends StatelessWidget {
               : null,
           keyboardType: isEmail
               ? TextInputType.emailAddress
-              : isNumeric
-                  ? TextInputType.number
-                  : TextInputType.text,
+              : isPhone
+                  ? TextInputType.numberWithOptions(signed: true)
+                  : isNumeric
+                      ? TextInputType.number
+                      : TextInputType.text,
           textInputAction: TextInputAction.next,
+          maxLines: maxLines,
           decoration: InputDecoration(
             labelText: label,
             hintText: hint,
             prefixIcon: icon,
             suffixIcon: isPassword
                 ? IconButton(
-                    icon: Icon(obsText ? Icons.visibility : Icons.visibility_off),
+                    icon:
+                        Icon(obsText ? Icons.visibility : Icons.visibility_off),
                     onPressed: () {
                       setState(() {
                         obsText = !obsText;
@@ -99,7 +109,9 @@ class CustomFormField extends StatelessWidget {
           ),
           inputFormatters: isNumeric
               ? [FilteringTextInputFormatter.digitsOnly]
-              : null, // Sadece sayı girişine izin verir
+              : isPhone
+                  ? [FilteringTextInputFormatter.digitsOnly]
+                  : null,
           validator: (value) {
             if (value == null || value.isEmpty) {
               return validationMessage;
@@ -108,6 +120,13 @@ class CustomFormField extends StatelessWidget {
             } else if (isEmail &&
                 !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
               return 'Please enter a valid email';
+            } else if (isPhone &&
+                !RegExp(r'^\+?[0-9]{7,15}$').hasMatch(value)) {
+              return 'Please enter a valid phone number';
+            } else if (isUrl &&
+                !RegExp(r'^(https?:\/\/)?([\w\-]+\.)+[\w\-]{2,}(\/[\w\-]*)*\/?$')
+                    .hasMatch(value)) {
+              return 'Please enter a valid website URL';
             }
             return null;
           },

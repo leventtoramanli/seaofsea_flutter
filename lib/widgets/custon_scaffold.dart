@@ -6,11 +6,15 @@ import 'package:seaofsea/utils/theme_selector.dart';
 class CustomScaffold extends StatelessWidget {
   final String? title;
   final Widget? body;
+  final List<Widget>? actions;
+  final Widget? floatingActionButton;
 
   const CustomScaffold({
     super.key,
     this.title,
     this.body,
+    this.actions,
+    this.floatingActionButton,
   });
 
   get index => null;
@@ -113,6 +117,7 @@ class CustomScaffold extends StatelessWidget {
             )
           : null,
       body: body ?? const SizedBox.shrink(),
+      floatingActionButton: floatingActionButton,
     );
   }
 }

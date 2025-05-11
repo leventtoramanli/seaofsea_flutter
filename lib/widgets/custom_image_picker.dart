@@ -181,6 +181,7 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
 
   @override
   Widget build(BuildContext context) {
+    final fitMode = widget.aspectRatio >= 2 ? BoxFit.fitHeight : BoxFit.cover;
     final double cWidth =
         widget.iwidth != 0.0 ? widget.iwidth : double.infinity;
     final double cHeight = widget.iheight != 0.0
@@ -189,6 +190,10 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
             ? 150
             : (MediaQuery.of(context).size.width / widget.aspectRatio);
     final double bRadius = widget.iradius;
+    String? imageUrl = widget.existingImageUrl;
+    if (imageUrl == null || imageUrl.isEmpty) {
+      imageUrl = "assets/cover.jpg";
+    }
     return Stack(
       children: [
         Container(
@@ -208,22 +213,21 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
             image: _selectedImage != null
                 ? DecorationImage(
                     image: FileImage(_selectedImage!),
-                    fit: BoxFit.cover,
+                    fit: fitMode,
                   )
                 : _selectedImageBytes != null
                     ? DecorationImage(
                         image: MemoryImage(_selectedImageBytes!),
-                        fit: BoxFit.cover,
+                        fit: fitMode,
                       )
-                    : widget.existingImageUrl != null &&
-                            widget.existingImageUrl!.isNotEmpty
+                    : imageUrl.contains("assets/")
                         ? DecorationImage(
-                            image: NetworkImage(widget.existingImageUrl!),
-                            fit: BoxFit.cover,
+                            image: AssetImage(imageUrl) as ImageProvider,
+                            fit: fitMode,
                           )
-                        : const DecorationImage(
-                            image: AssetImage('assets/cover.jpg'),
-                            fit: BoxFit.cover,
+                        : DecorationImage(
+                            image: NetworkImage(imageUrl),
+                            fit: fitMode,
                           ),
           ),
         ),

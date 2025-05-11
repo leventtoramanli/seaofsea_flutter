@@ -1,0 +1,16 @@
+{
+  "@@locale": "en",
+  "email_notifications": "Email Notifications",
+  "app_notifications": "App Notifications",
+  "weekly_summary": "Weekly Summary",
+  "save_settings": "Save Settings",
+  "notification_saved": "Notification preferences saved",
+  "language": "Language",
+  "profile": "Profile",
+  "logout": "Logout",
+  "theme": "Theme",
+  "notifications": "Notifications",
+  "privacy": "Privacy",
+  "log_out_question": "Are you sure you want to log out?",
+  "log_out_all_devices": "Log Out From All Devices"
+}

@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -79,7 +81,6 @@ class _LoginPageState extends State<LoginPage> {
         final deviceUUID = await authProvider.saveDeviceUUID();
 
         final response = await apiManager
-            // ignore: use_build_context_synchronously
           .request(context, endpoint: 'login', method: 'POST', body: {
           'email': emailController.text,
           'password': passwordController.text,
@@ -96,6 +97,7 @@ class _LoginPageState extends State<LoginPage> {
           final refreshToken = response['data']['refresh_token'] ?? 'null';
           final role = response['data']['role'];
           final isVerified = response['data']['is_verified'];
+          // ignore: unused_local_variable
           final userId = response['data']['id']?.toString();
 
           // Token doğruluğunu kontrol et
@@ -110,12 +112,11 @@ class _LoginPageState extends State<LoginPage> {
             throw Exception('Error saving token: $e');
           }
 
-          authProvider.login(token, role);
+          authProvider.login(context, token, role);
 
           if (isVerified != 1) {
             _showEmailVerificationDialog();
           } else {
-            // ignore: use_build_context_synchronously
             Navigator.pushReplacementNamed(context, '/');
           }
         }
@@ -346,11 +347,9 @@ class _LoginPageState extends State<LoginPage> {
                               final token = response['data']['token'];
                               await secureStorage.writeSecureData(
                                   'token', token);
-                              authProvider.login(token!, 'anonymous');
-                              // ignore: use_build_context_synchronously
+                              authProvider.login(context, token!, 'anonymous');
                               Navigator.pushReplacementNamed(context, '/home');
                             } else {
-                              // ignore: use_build_context_synchronously
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(response['message'] ??
@@ -359,7 +358,6 @@ class _LoginPageState extends State<LoginPage> {
                               );
                             }
                           } catch (e) {
-                            // ignore: use_build_context_synchronously
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text(
