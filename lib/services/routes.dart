@@ -8,6 +8,7 @@ import 'package:seaofsea/views/companies/company_detail_page.dart';
 import 'package:seaofsea/views/companies/company_setting_page.dart';
 import 'package:seaofsea/views/companies/compny_list_page.dart';
 import 'package:seaofsea/views/companies/create_new_compny.dart';
+import 'package:seaofsea/views/companies/join_company_page.dart';
 import 'package:seaofsea/views/companies/manage_companies.dart';
 import 'package:seaofsea/views/companies/manage_company_users.dart';
 import 'package:seaofsea/views/companies/update_company_page.dart';
@@ -69,6 +70,12 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
         builder: (context) => CompanySettingsPage(
           companyData: settings.arguments as Map<String, dynamic>,
         ),
+      );
+    case '/join_company':
+      final args = settings.arguments as Map<String, dynamic>?;
+      final int? companyId = args?['company_id'];
+      return MaterialPageRoute(
+        builder: (context) => JoinCompanyPage(companyId: companyId),
       );
 
     default:

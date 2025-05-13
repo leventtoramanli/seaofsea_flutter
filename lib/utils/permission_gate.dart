@@ -7,6 +7,7 @@ class PermissionGate extends StatelessWidget {
   final int entityId;
   final String entityType;
   final Widget child;
+  final bool wait;
 
   const PermissionGate({
     Key? key,
@@ -14,9 +15,26 @@ class PermissionGate extends StatelessWidget {
     required this.entityId,
     required this.child,
     this.entityType = 'company',
+    this.wait = false,
   }) : super(key: key);
 
   Future<bool> _checkPermission(BuildContext context) async {
+    final api = Provider.of<ApiManager>(context, listen: false);
+    final response = await api.post(context, 'check_permission', {
+      'permission_code': permissionCode,
+      'entity_type': entityType,
+      'entity_id': entityId,
+    });
+
+    return response['success'] == true;
+  }
+
+  static Future<bool> check({
+    required BuildContext context,
+    required String permissionCode,
+    required int entityId,
+    String entityType = 'company',
+  }) async {
     final api = Provider.of<ApiManager>(context, listen: false);
     final response = await api.post(context, 'check_permission', {
       'permission_code': permissionCode,
@@ -33,13 +51,15 @@ class PermissionGate extends StatelessWidget {
       future: _checkPermission(context),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox.shrink(); // istersen loading de koyabilirsin
+          return wait
+              ? const Center(child: CircularProgressIndicator())
+              : const SizedBox.shrink();
         }
 
         if (snapshot.data == true) {
           return child;
         } else {
-          return const SizedBox.shrink(); // izin yoksa hiç gösterme
+          return const SizedBox.shrink();
         }
       },
     );

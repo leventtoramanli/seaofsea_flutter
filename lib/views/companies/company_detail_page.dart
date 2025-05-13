@@ -6,7 +6,6 @@ import 'dart:io';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/permission_gate.dart';
@@ -778,144 +777,63 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
     );
   }
 
-  Future<void> _updateCompanyLogo(String companyId, File imageFile) async {
-    final api = Provider.of<ApiManager>(context, listen: false);
-
-    try {
-      // 1. Görseli yükle
-      final uploadResponse = await api.uploadImage(
-        context,
-        endpoint: 'upload_image_general',
-        file: imageFile,
-        meta: {
-          'type': 'company',
-          'folder': 'images/companies/logo/',
-          'prefix': 'c_$companyId',
-          'thumb': 'true',
-          'thumbSize': '128',
-        },
-      );
-
-      if (uploadResponse != null && uploadResponse['success'] == true) {
-        final uploadedFileName = uploadResponse['data']?['file_name'];
-
-        if (uploadedFileName != null) {
-          // 2. Veritabanında şirket kaydını güncelle
-          final updateResponse = await api.post(context, 'update_company', {
-            'company_id': companyId,
-            'logo': uploadedFileName,
-          });
-
-          if (updateResponse['success'] == true) {
-            debugPrint('✅ Logo updated successfully.');
-            setState(() {
-              widget.companyData['logo'] = uploadedFileName;
+  Widget _buildCompanyLogo(int companyId, String? existingLogo) {
+    final imageUrl = (existingLogo != null && existingLogo.isNotEmpty)
+        ? '${Provider.of<ApiManager>(context, listen: false).baseUrl}/images/companies/logo/thumb/$existingLogo'
+        : null;
+    return FutureBuilder(
+      future: PermissionGate.check(
+          context: context,
+          permissionCode: 'company.update_logo',
+          entityId: companyId),
+      builder: (context, snapshot) {
+        bool hasPermission = snapshot.data == true ? true : false;
+        return CustomImagePicker(
+          aspectRatio: 1,
+          existingImageUrl: imageUrl,
+          meta: {'type': 'company'},
+          iwidth: 80,
+          iheight: 80,
+          iradius: 40,
+          ishadow: true,
+          canEdit: hasPermission,
+          doUpload: hasPermission,
+          uploadEndpoint: 'upload_image_general',
+          uploadMeta: {
+            'type': 'company',
+            'folder': 'images/companies/logo/',
+            'prefix': 'c_$companyId',
+            'thumb': 'true',
+            'thumbSize': '128',
+          },
+          onUploaded: (uploadedFileName) async {
+            final api = Provider.of<ApiManager>(context, listen: false);
+            final updateResponse = await api.post(context, 'update_company', {
+              'company_id': companyId.toString(),
+              'logo': uploadedFileName,
             });
-          } else {
-            debugPrint('❌ Failed to update company with new logo.');
-          }
-        }
-      } else {
-        debugPrint('❌ Upload failed or no file_name.');
-      }
-    } catch (e) {
-      debugPrint('❌ Error updating logo: $e');
-    }
+
+            if (updateResponse['success'] == true) {
+              setState(() {
+                widget.companyData['logo'] = uploadedFileName;
+              });
+            }
+          },
+          onImagePicked:
+              (_, __) {}, // eski sistem artık kullanılmıyor ama boş bırakılmalı
+        );
+      },
+    );
   }
-Widget _buildLogoWithEditButton() {
-  final apiManager = Provider.of<ApiManager>(context, listen: false);
-  final companyId = widget.companyData['id'];
-  final existingLogo = widget.companyData['logo'] ?? '';
-  final logoUrl = existingLogo.isNotEmpty
-      ? '${apiManager.baseUrl}/images/companies/logo/thumb/$existingLogo'
-      : null;
-
-  return Stack(
-    alignment: Alignment.bottomRight,
-    children: [
-      // 👇 Logo HERKES için görünür
-      Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(40),
-          border: Border.all(color: Colors.grey.shade300, width: 2),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: logoUrl != null
-            ? Image.network(
-                logoUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
-              )
-            : const CircleAvatar(
-                radius: 40,
-                backgroundColor: Colors.grey,
-                child: Icon(Icons.business, color: Colors.white, size: 40),
-              ),
-      ),
-      // 👇 Sadece yetkililere edit butonu
-      PermissionGate(
-        permissionCode: 'company.update_logo',
-        entityId: companyId,
-        child: GestureDetector(
-          onTap: () => _pickAndUploadNewLogo(companyId),
-          child: Container(
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.black54,
-            ),
-            padding: const EdgeInsets.all(6),
-            child: const Icon(Icons.edit, color: Colors.white, size: 16),
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-Future<void> _pickAndUploadNewLogo(int companyId) async {
-  final picker = ImagePicker();
-  final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-  if (pickedFile == null) return;
-
-  final file = File(pickedFile.path);
-  final apiManager = Provider.of<ApiManager>(context, listen: false);
-
-  final response = await apiManager.uploadImage(
-    context,
-    endpoint: 'upload_image_general',
-    file: file,
-    meta: {
-      'type': 'company',
-      'folder': 'images/companies/logo/',
-      'prefix': 'c_$companyId',
-      'thumb': 'true',
-      'thumbSize': '128',
-    },
-  );
-
-  if (response != null && response['success'] == true) {
-    final fileName = response['data']?['file_name'];
-    if (fileName != null) {
-      await apiManager.post(context, 'update_company', {
-        'company_id': companyId.toString(),
-        'logo': fileName,
-      });
-      setState(() {
-        widget.companyData['logo'] = fileName;
-      });
-    }
-  }
-}
-
 
   Widget _buildHeader(BuildContext context, bool isDesktop, bool isTablet) {
+    final companyId = widget.companyData['id'];
+    final logo = widget.companyData['logo'];
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildLogoWithEditButton(),
+        _buildCompanyLogo(companyId, logo),
         Column(
           children: [
             if ((isDesktop || isTablet) && (isAdmin || isEditor))
@@ -992,7 +910,10 @@ Future<void> _pickAndUploadNewLogo(int companyId) async {
       children: [
         if (isViewer || isFollower)
           ElevatedButton.icon(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pushNamed(context, '/join_company',
+                  arguments: {'company_id': widget.companyData['id']},);
+            },
             icon: const Icon(Icons.work_outline),
             label: const Text('Apply for a Job'),
           ),

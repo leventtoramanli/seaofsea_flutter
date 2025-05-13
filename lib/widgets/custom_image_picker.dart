@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
@@ -6,6 +8,7 @@ import 'dart:ui' as ui;
 import 'package:image_picker/image_picker.dart';
 import 'package:crop_image/crop_image.dart';
 import 'package:provider/provider.dart';
+import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 
 class CustomImagePicker extends StatefulWidget {
@@ -17,6 +20,11 @@ class CustomImagePicker extends StatefulWidget {
   final double iradius;
   final dynamic ishadow;
   final String? existingImageUrl;
+  final bool canEdit;
+  final bool doUpload;
+  final String? uploadEndpoint;
+  final Map<String, String>? uploadMeta;
+  final void Function(String fileName)? onUploaded;
 
   const CustomImagePicker({
     super.key,
@@ -28,6 +36,11 @@ class CustomImagePicker extends StatefulWidget {
     this.iradius = 0.0,
     this.ishadow = false,
     this.existingImageUrl,
+    this.canEdit = true,
+    this.doUpload = false,
+    this.uploadEndpoint,
+    this.uploadMeta,
+    this.onUploaded,
   });
 
   @override
@@ -50,7 +63,6 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
   Future<void> _pickAndCropImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    // ignore: use_build_context_synchronously
     var authProvider = Provider.of<AuthProvider>(context, listen: false);
     var userId = authProvider.userInfo!['id'];
 
@@ -69,7 +81,6 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
       }
 
       await showDialog(
-        // ignore: use_build_context_synchronously
         context: context,
         barrierDismissible: false,
         builder: (context) {
@@ -134,6 +145,25 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
                                     _selectedImage = file;
                                   });
                                   widget.onImagePicked(file, null);
+                                  if (widget.doUpload &&
+                                      widget.uploadEndpoint != null) {
+                                    final api = Provider.of<ApiManager>(context,
+                                        listen: false);
+                                    final response = await api.uploadImage(
+                                      context,
+                                      endpoint: widget.uploadEndpoint!,
+                                      file: file,
+                                      meta: widget.uploadMeta ?? {},
+                                    );
+                                    final fileName =
+                                        response?['data']?['file_name'];
+                                    if (fileName != null) {
+                                      widget.onUploaded?.call(fileName);
+                                    }
+                                  } else {
+                                    widget.onImagePicked(
+                                        file, null); // eski sistem hâlâ aktif
+                                  }
                                 } else {
                                   // Web platformunda base64 formatına dönüştürme
                                   final base64Image =
@@ -162,7 +192,6 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
                                 });
                                 await Future.delayed(
                                     const Duration(seconds: 1));
-                                // ignore: use_build_context_synchronously
                                 Navigator.pop(context);
                               }
                             }
@@ -231,25 +260,26 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
                           ),
           ),
         ),
-        Positioned(
-          bottom: 10,
-          right: 10,
-          child: GestureDetector(
-            onTap: _pickAndCropImage,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.black.withAlpha(60),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.add_a_photo,
-                color: Colors.white,
-                size: 24,
+        if (widget.canEdit)
+          Positioned(
+            bottom: 10,
+            right: 10,
+            child: GestureDetector(
+              onTap: _pickAndCropImage,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(60),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.add_a_photo,
+                  color: Colors.white,
+                  size: 24,
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }

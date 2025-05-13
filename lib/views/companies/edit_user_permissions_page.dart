@@ -1,7 +1,4 @@
 // ignore_for_file: use_build_context_synchronously
-
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
@@ -73,7 +70,8 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                backgroundColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
                 foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
                 backgroundImage: image != null
                     ? NetworkImage('http://localhost/images/user/user/$image')
@@ -117,8 +115,7 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                       value: entry.key,
                       enabled: !disabled,
                       child: Text(
-                        entry.value[0].toUpperCase() +
-                            entry.value.substring(1),
+                        entry.value[0].toUpperCase() + entry.value.substring(1),
                         style: TextStyle(
                           color: disabled ? Colors.grey : null,
                         ),
@@ -189,15 +186,25 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
       'user_id': widget.userData['id'],
       'company_id': widget.companyId,
       'permission_codes': userPermissions,
+      'role_id': userRole, // 👈 rol güncellemesi için eklendi
     });
 
     if (result['success'] == true) {
-      Navigator.pop(context, true); // success flag
+      Navigator.pop(context, true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isSelf = widget.userData['id'] ==
+        Provider.of<AuthProvider>(context, listen: false).userInfo?['id'];
+
+    final isAdmin =
+        Provider.of<AuthProvider>(context, listen: false).userInfo?['role'] ==
+            'admin';
+
+    final canEdit = !isSelf || isAdmin;
+
     return CustomScaffold(
       title: 'Permissions: ${widget.userData['name']}',
       body: isLoading
@@ -225,17 +232,20 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                         child: Checkbox(
                           value:
                               userPermissions.length == allPermissions.length,
-                          onChanged: (value) {
-                            setState(() {
-                              if (value == true) {
-                                userPermissions = allPermissions
-                                    .map((perm) => perm['code'].toString())
-                                    .toList();
-                              } else {
-                                userPermissions.clear();
-                              }
-                            });
-                          },
+                          onChanged: canEdit
+                              ? (value) {
+                                  setState(() {
+                                    if (value == true) {
+                                      userPermissions = allPermissions
+                                          .map(
+                                              (perm) => perm['code'].toString())
+                                          .toList();
+                                    } else {
+                                      userPermissions.clear();
+                                    }
+                                  });
+                                }
+                              : null,
                         ),
                       ),
                     ],
@@ -254,7 +264,8 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                       return CheckboxListTile(
                         title: Text(label),
                         value: selected,
-                        onChanged: (_) => _togglePermission(code),
+                        onChanged:
+                            canEdit ? (_) => _togglePermission(code) : null,
                       );
                     },
                   ),

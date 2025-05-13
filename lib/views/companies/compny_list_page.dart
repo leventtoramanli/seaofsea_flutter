@@ -52,7 +52,7 @@ class _CompanyListPageState extends State<CompanyListPage> {
 
   Future<void> _fetchAllCompanies({bool reset = false}) async {
     if (_isLoading || !_hasMore) return;
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
 
     final api = context.read<ApiManager>();
 
@@ -84,7 +84,9 @@ class _CompanyListPageState extends State<CompanyListPage> {
       debugPrint('⚠️ Unexpected response structure: $response');
     }
 
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   void _scrollListener() {
@@ -95,17 +97,15 @@ class _CompanyListPageState extends State<CompanyListPage> {
   }
 
   Future<bool> _checkLogin() async {
-  final auth = Provider.of<AuthProvider>(context, listen: false);
-  return auth.isLoggedIn;
-}
-
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    return auth.isLoggedIn;
+  }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
       future: _checkLogin(),
       builder: (context, snapshot) {
-        
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
