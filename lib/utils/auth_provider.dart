@@ -215,6 +215,7 @@ class AuthProvider with ChangeNotifier {
         await secureStorage.writeSecureData('surname', _userInfo?['surname']);
         await secureStorage.writeSecureData(
             'coverImage', _userInfo?['cover_image']);
+        await secureStorage.writeSecureData('user_image', _userInfo?['user_image']);
         notifyListeners();
 
         debugPrint('✅ User info refreshed successfully: $_userInfo');

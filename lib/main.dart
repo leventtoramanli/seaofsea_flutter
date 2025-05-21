@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:provider/provider.dart';
 import 'package:seaofsea/services/providers.dart';
 import 'package:seaofsea/services/routes.dart';
@@ -60,6 +62,13 @@ class MmsApp extends StatelessWidget {
               themeMode: themeProvider.themeMode,
               onGenerateRoute: generateRoute,
               initialRoute: '/',
+              localizationsDelegates: const [
+                ...GlobalMaterialLocalizations.delegates,
+                quill.FlutterQuillLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('en'),
+              ],
             ),
           ),
           // Blur efekti ve tıklama yönetimi

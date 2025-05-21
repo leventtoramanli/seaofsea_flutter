@@ -1,9 +1,6 @@
-// join_company_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
-import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
 
 class JoinCompanyPage extends StatefulWidget {
@@ -17,33 +14,76 @@ class JoinCompanyPage extends StatefulWidget {
 
 class _JoinCompanyPageState extends State<JoinCompanyPage> {
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _customRankController = TextEditingController();
+  final TextEditingController _customPositionController =
+      TextEditingController();
+
   List<Map<String, dynamic>> _searchResults = [];
+  List<String> _positionList = [];
+  Map<String, List<String>> _areaOptions = {};
+
   bool _isLoading = false;
   String? _error;
+  String? _selectedAreaType;
+  String? _selectedArea;
+  String? _selectedPosition;
+
   List<int> _joinedCompanyIds = [];
   Map<String, dynamic>? _selectedCompany;
-  String _selectedRank = 'Crew';
-
-  final List<String> _availableRanks = [
-    'Crew',
-    'Engineer',
-    'Captain',
-    'Other',
-  ];
 
   @override
   void initState() {
     super.initState();
     _loadJoinedCompanies();
+    _fetchAreaOptions();
     if (widget.companyId != null) {
       _fetchCompanyById(widget.companyId!);
     }
   }
 
-  Future<void> _loadJoinedCompanies() async {
+  Future<void> _fetchAreaOptions() async {
     final api = Provider.of<ApiManager>(context, listen: false);
-    final res = await api.post(context, 'get_user_companies', {});
+    final response = await api.post(context, 'get_position_areas', {});
+
+    if (response['success'] == true &&
+        response['data'] is Map<String, dynamic>) {
+      final raw = response['data'] as Map<String, dynamic>;
+      final parsed = raw.map((key, value) {
+        return MapEntry(key, List<String>.from(value));
+      });
+
+      setState(() {
+        _areaOptions = parsed;
+      });
+    }
+  }
+
+  Future<void> _fetchPositions({String? area}) async {
+    if (_selectedArea == null) return;
+
+    setState(() {
+      _isLoading = true;
+      _positionList = [];
+    });
+
+    final api = Provider.of<ApiManager>(context, listen: false);
+    final response = await api.post(context, 'get_positions_by_area', {
+      'area': _selectedArea,
+    });
+
+    if (response['success'] == true && response['data'] is List) {
+      final items = response['data'] as List;
+      setState(() {
+        _positionList = items.map((e) => e['name'].toString()).toList();
+      });
+    }
+
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadJoinedCompanies({String? area}) async {
+    final api = Provider.of<ApiManager>(context, listen: false);
+    final res = await api
+        .post(context, 'get_user_companies', {if (area != null) 'area': area});
     if (res['success'] == true && res['data'] is List) {
       final companies = res['data'] as List;
       setState(() {
@@ -75,9 +115,9 @@ class _JoinCompanyPageState extends State<JoinCompanyPage> {
     final response = await api.post(context, 'create_user_company', {
       'company_id': _selectedCompany!['id'].toString(),
       'role': 'employee',
-      'rank': _selectedRank == 'Other'
-          ? _customRankController.text.trim()
-          : _selectedRank,
+      'rank': _selectedPosition == 'Other'
+          ? _customPositionController.text.trim()
+          : _selectedPosition,
     });
 
     if (response['success'] == true) {
@@ -149,25 +189,66 @@ class _JoinCompanyPageState extends State<JoinCompanyPage> {
         ),
         const SizedBox(height: 16),
         DropdownButtonFormField<String>(
-          value: _availableRanks.contains(_selectedRank) ? _selectedRank : 'Other',
+          value: _selectedAreaType,
           decoration: const InputDecoration(
-            labelText: 'Select Position',
+            labelText: 'Are you applying for a ship or office position?',
             border: OutlineInputBorder(),
           ),
-          items: _availableRanks.map((rank) {
-            return DropdownMenuItem(
-              value: rank,
-              child: Text(rank),
-            );
+          items: _areaOptions.keys.map((type) {
+            return DropdownMenuItem(value: type, child: Text(type));
           }).toList(),
           onChanged: (value) {
-            setState(() => _selectedRank = value ?? 'Other');
+            setState(() {
+              _selectedAreaType = value;
+              _selectedArea = null;
+              _selectedPosition = null;
+              _loadJoinedCompanies(area: _selectedAreaType);
+            });
           },
         ),
         const SizedBox(height: 16),
-        if (_selectedRank == 'Other')
+        if (_selectedAreaType != null &&
+            _areaOptions[_selectedAreaType] != null)
+          DropdownButtonFormField<String>(
+            value: _selectedArea,
+            decoration: const InputDecoration(
+              labelText: 'Select Department Area',
+              border: OutlineInputBorder(),
+            ),
+            items: _areaOptions[_selectedAreaType]!.map((area) {
+              return DropdownMenuItem(value: area, child: Text(area));
+            }).toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedArea = value;
+                _selectedPosition = null;
+              });
+              _fetchPositions(area: value);
+            },
+          ),
+        const SizedBox(height: 16),
+        if (_selectedArea != null && !_isLoading)
+          DropdownButtonFormField<String>(
+            value: _positionList.contains(_selectedPosition)
+                ? _selectedPosition
+                : null,
+            decoration: const InputDecoration(
+              labelText: 'Select Position',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              ..._positionList
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e))),
+              const DropdownMenuItem(value: 'Other', child: Text('Other')),
+            ],
+            onChanged: (value) {
+              setState(() => _selectedPosition = value);
+            },
+          ),
+        const SizedBox(height: 16),
+        if (_selectedPosition == 'Other')
           TextField(
-            controller: _customRankController,
+            controller: _customPositionController,
             decoration: const InputDecoration(
               labelText: 'Custom Position',
               border: OutlineInputBorder(),

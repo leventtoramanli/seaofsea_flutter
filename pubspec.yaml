@@ -52,6 +52,11 @@ dependencies:
   url_launcher: ^6.3.1
   url_launcher_platform_interface: ^2.3.2
   dropdown_search: ^5.0.6
+  flutter_quill: ^11.4.1
+  quill_delta: ^3.0.0-nullsafety.2
+  flutter_html: ^3.0.0
+  flutter_quill_extensions: ^11.0.0
+  country_flags: ^3.2.0
 
 dev_dependencies:
   flutter_test:
