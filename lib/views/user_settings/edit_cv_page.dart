@@ -1,7 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/quill_delta.dart' as quill_delta;
 import 'package:provider/provider.dart';
+import 'package:seaofsea/services/date_time_service.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/views/user_settings/cv_popup_editor.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:seaofsea/widgets/test_with_social_icons.dart';
 
 class CVPageData {
   final Map<String, dynamic> user;
@@ -38,6 +44,7 @@ class _EditCVPageState extends State<EditCVPage> {
     return CVPageData(user: user, cv: cv, isOwn: isOwn);
   }
 
+//Geçici data
   final Map<String, dynamic> cvData = {
     'profile': [
       'Write a short brief introduction of just a few paragraphs explaining exactly who you are, your strengths and why you feel you are such a suitable candidate.',
@@ -84,7 +91,7 @@ class _EditCVPageState extends State<EditCVPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
+              SelectableText(
                 title,
                 style: TextStyle(
                   fontSize: 16,
@@ -118,6 +125,22 @@ class _EditCVPageState extends State<EditCVPage> {
     });
   }
 
+  Widget extractPlainText(String jsonDelta) {
+    try {
+      final delta = quill_delta.Delta.fromJson(jsonDecode(jsonDelta));
+      final doc = quill.Document.fromDelta(delta);
+      final controller = quill.QuillController(
+          document: doc,
+          selection: TextSelection.collapsed(offset: 0),
+          readOnly: true);
+      return DefaultTextStyle(
+          style: const TextStyle(color: Colors.black),
+          child: quill.QuillEditor.basic(controller: controller));
+    } catch (e) {
+      return '' as quill.QuillEditor;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -130,16 +153,47 @@ class _EditCVPageState extends State<EditCVPage> {
           }
 
           final data = snapshot.data!;
-          final user = data.user;
           final cv = data.cv;
           final isOwn = data.isOwn;
 
-          final basicInfo = cv['data']?['basic_info'] ?? '';
-          final professionalTitle = cv['data']?['professional_title'] ?? '';
-          final contact =
-              'Dayjob.com, 120 Vyse Street\nBirmingham B18\n0121 638 0026\ninfo@dayjob.com\nFacebook.com/yourname';
-          final education =
-              'University name\n2014 – 2017\nCourse details\n\nCollege name\n2012 – 2014\nSubject\n\nSchool name\n2008 – 2012\nEnglish (A) Maths (B)';
+          String basicInfo = cv['data']?['basic_info'] ?? '';
+          String professionalTitle = cv['data']?['professional_title'] ?? '';
+          final contactData = cv['data'] ?? {};
+          final lastUpdated = cv['data']?['updated_at'] ?? '';
+
+          final countryId = contactData['country_name'];
+          final cityId = contactData['city_name'];
+          final address = contactData['address'] ?? '';
+          final phones =
+              List<String>.from(jsonDecode(contactData['phone'] ?? '[]'));
+          final emails =
+              List<String>.from(jsonDecode(contactData['email'] ?? '[]'));
+          final socials =
+              List<String>.from(jsonDecode(contactData['social'] ?? '[]'));
+
+          final List<Widget> contactWidgets = [];
+
+          if (address.trim().isNotEmpty) {
+            contactWidgets.add(TextWithIcons(text: address, isColored: Colors.white));
+          }
+
+          if (cityId != null || countryId != null) {
+            contactWidgets.add(
+              TextWithIcons(text: '${cityId ?? ''} ${countryId ?? ''}'.trim(), isColored: Colors.white),
+            );
+          }
+
+          for (final phone in phones) {
+            contactWidgets.add(TextWithIcons(text: phone, isColored: Colors.white));
+          }
+
+          for (final email in emails) {
+            contactWidgets.add(TextWithIcons(text: email, isColored: Colors.white));
+          }
+
+          for (final social in socials) {
+            contactWidgets.add(TextWithIcons(text: social, isColored: Colors.white));
+          }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24),
@@ -148,10 +202,12 @@ class _EditCVPageState extends State<EditCVPage> {
                 constraints: const BoxConstraints(maxWidth: 1200),
                 child: Column(
                   children: [
+                    //upper part
                     IntrinsicHeight(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          //image
                           Expanded(
                             flex: 35,
                             child: Container(
@@ -205,6 +261,7 @@ class _EditCVPageState extends State<EditCVPage> {
                               ),
                             ),
                           ),
+                          //profile
                           Expanded(
                             flex: 65,
                             child: Container(
@@ -222,35 +279,39 @@ class _EditCVPageState extends State<EditCVPage> {
                                             context: context,
                                             builder: (context) => CVPopupEditor(
                                               title: 'Edit Profile',
+                                              type: 'basic_info',
                                               initialText: cv['data']
                                                       ['basic_info'] ??
                                                   '',
-                                              onSubmit: (updatedText) {
-                                                debugPrint(
-                                                    'New content: $updatedText');
+                                              onSubmit: (updatedText) async {
+                                                setState(() {
+                                                  basicInfo = updatedText;
+                                                });
                                               },
                                             ),
                                           );
                                         },
                                       )
                                     : null,
-                                child: Text(
-                                  basicInfo.isNotEmpty
-                                      ? basicInfo
-                                      : 'Not filled yet.',
-                                  style: const TextStyle(
-                                      color: Colors.black,
-                                      fontStyle: FontStyle.italic),
-                                ),
+                                child: basicInfo.isNotEmpty
+                                    ? extractPlainText(basicInfo)
+                                    : Text(
+                                        'Not filled yet.',
+                                        style: const TextStyle(
+                                            color: Colors.black,
+                                            fontStyle: FontStyle.italic),
+                                      ),
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
+                    //name and title part
                     IntrinsicHeight(
                       child: Row(
                         children: [
+                          //title part
                           Expanded(
                             flex: 35,
                             child: Container(
@@ -284,9 +345,11 @@ class _EditCVPageState extends State<EditCVPage> {
                                           builder: (context) => CVPopupEditor(
                                             title: 'Edit Professional Title',
                                             initialText: professionalTitle,
+                                            type: 'professional_title',
                                             onSubmit: (updatedText) {
-                                              debugPrint(
-                                                  'New content: $updatedText');
+                                              setState(() {
+                                                professionalTitle = updatedText;
+                                              });
                                             },
                                           ),
                                         );
@@ -296,6 +359,7 @@ class _EditCVPageState extends State<EditCVPage> {
                               ),
                             ),
                           ),
+                          //name
                           Expanded(
                             flex: 65,
                             child: Container(
@@ -313,10 +377,12 @@ class _EditCVPageState extends State<EditCVPage> {
                         ],
                       ),
                     ),
+                    //lover part
                     IntrinsicHeight(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          //left side
                           Expanded(
                             flex: 35,
                             child: Container(
@@ -325,19 +391,25 @@ class _EditCVPageState extends State<EditCVPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  //contact
                                   _buildSimpleSection(
                                     'Contact',
-                                    'Dayjob.com, 120 Vyse Street\nBirmingham B18\n0121 638 0026\ninfo@dayjob.com\nFacebook.com/yourname',
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: contactWidgets,
+                                    ),
                                     true,
                                     isOwn: true, //isOwnCV,
+                                    widget: true,
+                                    isColored: Colors.white,
                                     onEdit: () {
                                       showDialog(
                                         context: context,
                                         builder: (context) => CVPopupEditor(
                                           title: 'Edit Contact',
                                           type: 'contact',
-                                          initialText:
-                                              'Dayjob.com\n120 Vyse Street\ninfo@dayjob.com',
+                                          initialCV: cv['data'],
                                           onSubmit: (value) {
                                             if (value == 'success') {
                                               setState(() {});
@@ -348,6 +420,7 @@ class _EditCVPageState extends State<EditCVPage> {
                                     },
                                   ),
                                   const SizedBox(height: 20),
+                                  //Expertise
                                   const Text('Expertise',
                                       style: TextStyle(
                                           fontSize: 14,
@@ -370,6 +443,7 @@ class _EditCVPageState extends State<EditCVPage> {
                               ),
                             ),
                           ),
+                          //right side
                           Expanded(
                             flex: 65,
                             child: Container(
@@ -453,9 +527,13 @@ class _EditCVPageState extends State<EditCVPage> {
                                             const SizedBox(height: 4),
                                             ...List<String>.from(
                                                     entry['details'])
-                                                .map((e) => Text('• $e',
-                                                    style: const TextStyle(
-                                                        color: Colors.black))),
+                                                .map(
+                                              (e) => Text(
+                                                '• $e',
+                                                style: const TextStyle(
+                                                    color: Colors.black),
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       );
@@ -474,6 +552,10 @@ class _EditCVPageState extends State<EditCVPage> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 3),
+                    Text(
+                        'Last Update: ${DateTimeService.formatFromISO(lastUpdated, context)}',
+                        style: TextStyle(color: Colors.black, fontSize: 12)),
                   ],
                 ),
               ),
@@ -523,18 +605,21 @@ class _EditCVPageState extends State<EditCVPage> {
 
   Widget _buildSimpleSection(
     String title,
-    String content,
+    dynamic content,
     bool isDark, {
     bool isOwn = false,
+    bool widget = false,
+    Color? isColored,
     VoidCallback? onEdit,
   }) {
+    debugPrint('isColored: $isColored');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
+            SelectableText(
               title,
               style: TextStyle(
                 fontSize: 14,
@@ -555,10 +640,12 @@ class _EditCVPageState extends State<EditCVPage> {
           ],
         ),
         const SizedBox(height: 8),
-        Text(
-          content,
-          style: TextStyle(color: isDark ? Colors.white : Colors.black),
-        ),
+        widget
+            ? content
+            : Text(
+                content,
+                style: TextStyle(color: isColored ?? (isDark ? Colors.white : Colors.black)),
+              ),
       ],
     );
   }

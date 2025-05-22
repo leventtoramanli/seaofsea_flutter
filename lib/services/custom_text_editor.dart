@@ -70,6 +70,7 @@ class QuillTextEditor extends StatefulWidget {
   final void Function(String jsonDelta)? onSubmit;
   final String submitLabel;
   final Map<String, bool>? toolbarButtons;
+  final double minHeight;
 
   const QuillTextEditor({
     super.key,
@@ -78,16 +79,22 @@ class QuillTextEditor extends StatefulWidget {
     this.submitLabel = 'Save',
     this.showAll = true,
     this.toolbarButtons,
+    this.minHeight = 50,
   });
 
   @override
-  State<QuillTextEditor> createState() => _QuillTextEditorState();
+  State<QuillTextEditor> createState() => QuillTextEditorState();
 }
 
-class _QuillTextEditorState extends State<QuillTextEditor> {
+class QuillTextEditorState extends State<QuillTextEditor> {
   late final QuillController _controller;
   final FocusNode _editorFocusNode = FocusNode();
   final ScrollController _editorScrollController = ScrollController();
+
+  String getJson() {
+    final delta = _controller.document.toDelta();
+    return jsonEncode(delta.toJson());
+  }
 
   @override
   void initState() {
@@ -125,6 +132,8 @@ class _QuillTextEditorState extends State<QuillTextEditor> {
 
   @override
   Widget build(BuildContext context) {
+    bool showButton = false;
+    final minHeight = widget.minHeight;
     final theme = Provider.of<ThemeProvider>(context, listen: true);
     final buttons = widget.showAll
         ? maximalToolbarButtons
@@ -142,7 +151,6 @@ class _QuillTextEditorState extends State<QuillTextEditor> {
           child: QuillSimpleToolbar(
             controller: _controller,
             config: QuillSimpleToolbarConfig(
-              
               showClipboardPaste: buttons['showClipboardPaste'] ?? false,
               showBoldButton: buttons['showBoldButton'] ?? false,
               showItalicButton: buttons['showItalicButton'] ?? false,
@@ -208,18 +216,20 @@ class _QuillTextEditorState extends State<QuillTextEditor> {
               placeholder: 'Write here...',
               padding: EdgeInsets.zero,
               scrollable: true,
+              minHeight: minHeight,
               maxHeight: 160,
               autoFocus: true,
               embedBuilders: FlutterQuillEmbeds.editorBuilders(),
             ),
           ),
         ),
-        const SizedBox(height: 10),
-        ElevatedButton.icon(
-          onPressed: _submit,
-          icon: const Icon(Icons.check),
-          label: Text(widget.submitLabel),
-        ),
+        showButton
+            ? ElevatedButton.icon(
+                onPressed: _submit,
+                icon: const Icon(Icons.check),
+                label: Text(widget.submitLabel),
+              )
+            : Container(),
       ],
     );
   }

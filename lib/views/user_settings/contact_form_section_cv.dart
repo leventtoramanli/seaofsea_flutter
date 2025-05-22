@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:country_flags/country_flags.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -5,17 +7,27 @@ import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 
 class ContactFormSection extends StatefulWidget {
+  final Map<String, dynamic>? initialCV;
   final bool isDark;
   final Function(Map<String, dynamic>)? onChanged;
   final int? initialCountryId;
   final int? initialCityId;
+  final String? initialAddress;
+  final List<String>? initialPhones;
+  final List<String>? initialEmails;
+  final List<Map<String, String>>? initialSocials;
 
   const ContactFormSection({
     super.key,
+    this.initialCV,
     this.isDark = false,
     this.onChanged,
     this.initialCountryId,
     this.initialCityId,
+    this.initialAddress,
+    this.initialPhones,
+    this.initialEmails,
+    this.initialSocials,
   });
 
   @override
@@ -31,13 +43,15 @@ class _ContactFormSectionState extends State<ContactFormSection> {
   List<TextEditingController> emailControllers = [TextEditingController()];
   List<TextEditingController> socialControllers = [TextEditingController()];
 
+  TextEditingController? _emailController;
+
   @override
   void dispose() {
     _countryController.dispose();
     _cityController.dispose();
     _addressController.dispose();
     for (var c in phoneControllers) c.dispose();
-    for (var c in emailControllers) c.dispose();
+    _emailController?.dispose();
     for (var c in socialControllers) c.dispose();
     super.dispose();
   }
@@ -46,21 +60,86 @@ class _ContactFormSectionState extends State<ContactFormSection> {
     final data = {
       'country_id': selectedCountryId,
       'city_id': selectedCityId,
-      'address': _addressController.text,
-      'phones': phoneControllers.map((c) => c.text).toList(),
-      'emails': emailControllers.map((c) => c.text).toList(),
-      'socials': socialControllers.map((c) => c.text).toList(),
+      'address': _addressController.text.trim(),
+      'email': [_emailController?.text],
+      'phone': phoneControllers.map((c) => c.text).toList(),
+      'social': socialControllers.map((c) => c.text).toList(),
     };
     widget.onChanged?.call(data);
   }
 
   @override
   void initState() {
-    // TODO: implement initState
     super.initState();
-    selectedCountryId = widget.initialCountryId;
-    selectedCityId = widget.initialCityId;
-    loadCountries();
+    loadInitialData();
+  }
+
+  Future<void> loadInitialData() async {
+    final contact = widget.initialCV ?? {};
+
+    selectedCountryId = contact['country_id'];
+    selectedCityId = contact['city_id'];
+    _addressController.text = contact['address'] ?? '';
+
+    // ✅ Email
+    final rawEmail = contact['email'];
+    final List<String> emailList = rawEmail is List
+        ? List<String>.from(rawEmail)
+        : (rawEmail is String && rawEmail.contains('['))
+            ? List<String>.from(jsonDecode(rawEmail))
+            : (rawEmail is String && rawEmail.isNotEmpty)
+                ? [rawEmail]
+                : [];
+
+    _emailController = TextEditingController(
+      text: emailList.isNotEmpty ? emailList.first : '',
+    );
+
+    // ✅ Phone
+    final rawPhones = contact['phone'];
+    final List<String> phoneList = rawPhones is List
+        ? List<String>.from(rawPhones)
+        : (rawPhones is String && rawPhones.contains('['))
+            ? List<String>.from(jsonDecode(rawPhones))
+            : (rawPhones is String && rawPhones.isNotEmpty)
+                ? [rawPhones]
+                : [];
+
+    phoneControllers = phoneList.isNotEmpty
+        ? phoneList.map((e) => TextEditingController(text: e)).toList()
+        : [TextEditingController()];
+
+    // ✅ Social
+    final rawSocial = contact['social'];
+    final List<String> socialList = rawSocial is List
+        ? List<String>.from(rawSocial)
+        : (rawSocial is String && rawSocial.contains('['))
+            ? List<String>.from(jsonDecode(rawSocial))
+            : (rawSocial is String && rawSocial.isNotEmpty)
+                ? [rawSocial]
+                : [];
+
+    socialControllers = socialList.isNotEmpty
+        ? socialList.map((e) => TextEditingController(text: e)).toList()
+        : [TextEditingController()];
+
+    // Ülke ve şehir listesini sırayla yükle
+    await loadCountries();
+
+    final selectedCountry = countriesFields.firstWhere(
+      (e) => e['id'] == selectedCountryId,
+      orElse: () => {},
+    );
+
+    if (selectedCountry.isNotEmpty && selectedCountry['name'] != null) {
+      final countryName = selectedCountry['name'];
+      await loadCities(countryName);
+      setState(() {
+        selectedCityId = contact['city_id']; // ✅ Şehir id’yi burada ayarla
+      });
+    }
+
+    setState(() {}); // ekranı güncelle
   }
 
   int? selectedCountryId;
@@ -95,7 +174,6 @@ class _ContactFormSectionState extends State<ContactFormSection> {
     if (response['success'] == true) {
       setState(() {
         citiesFields = List<Map<String, dynamic>>.from(response['data']);
-        selectedCityId = null;
       });
     } else {
       debugPrint('Şehirler yüklenemedi: ${response['message']}');
@@ -142,6 +220,7 @@ class _ContactFormSectionState extends State<ContactFormSection> {
   }
 
   @override
+  // ignore: override_on_non_overriding_member
   Widget _buildDynamicList(String label, List<TextEditingController> list,
       {IconData? icon}) {
     final color = Provider.of<ThemeProvider>(context);
@@ -292,9 +371,19 @@ class _ContactFormSectionState extends State<ContactFormSection> {
               border: const OutlineInputBorder()),
         ),
         const SizedBox(height: 10),
-        _buildDynamicList("Phone", phoneControllers, icon: Icons.phone),
+        TextFormField(
+          controller: _emailController,
+          onChanged: (_) => _notifyChange(),
+          decoration: InputDecoration(
+            labelText: 'Email',
+            prefixIcon: const Icon(Icons.email),
+            labelStyle: TextStyle(
+                color: color.isDarkMode ? Colors.white : Colors.black),
+            border: const OutlineInputBorder(),
+          ),
+        ),
         const SizedBox(height: 10),
-        _buildDynamicList("Email", emailControllers, icon: Icons.email),
+        _buildDynamicList("Phone", phoneControllers, icon: Icons.phone),
         const SizedBox(height: 10),
         _buildDynamicList("Social Media", socialControllers, icon: Icons.link),
       ],
