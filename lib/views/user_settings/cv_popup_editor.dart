@@ -6,6 +6,7 @@ import 'package:seaofsea/services/custom_text_editor.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/views/user_settings/contact_form_section_cv.dart';
 import 'package:seaofsea/views/user_settings/cv_education_setting.dart';
+import 'package:seaofsea/views/user_settings/cv_referance_setting.dart';
 import 'package:seaofsea/views/user_settings/cv_work_experience_settings.dart';
 import 'package:seaofsea/views/user_settings/expertice_form_section_cv.dart';
 
@@ -35,6 +36,7 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
   final GlobalKey<QuillTextEditorState> _editorKey = GlobalKey();
   final GlobalKey<FormState> _educationFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _workFormKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _referenceFormKey = GlobalKey<FormState>();
 
   String content = '';
   Map<String, dynamic> contactData = {};
@@ -89,6 +91,25 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
       pendingData = {
         'education': result,
       };
+    }
+
+    if (widget.type == 'work_experience') {
+      final state = _workFormKey.currentState?.context
+          .findAncestorStateOfType<CVWorkExperienceSettingsState>();
+      final result = state?.getData();
+      if (result == null) return;
+
+      pendingData = {
+        'work_experience': result,
+      };
+    }
+
+    if (widget.type == 'references') {
+      final state = _referenceFormKey.currentState?.context
+          .findAncestorStateOfType<CVReferenceSettingsState>();
+      final result = state?.getData();
+      if (result == null) return;
+      pendingData = {'references': result};
     }
 
     debugPrint('Pending data: $pendingData');
@@ -206,19 +227,48 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
           ),
         );
       case 'work_experience':
+      final raw = widget.initialCV?[type];
+        List<Map<String, dynamic>> workList = [];
+
+        if (raw is String) {
+          try {
+            workList = List<Map<String, dynamic>>.from(jsonDecode(raw));
+          } catch (_) {
+            workList = [];
+          }
+        } else if (raw is List) {
+          workList = List<Map<String, dynamic>>.from(raw);
+        }
         return SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(8.0),
             child: CVWorkExperienceSettings(
               formKey: _workFormKey,
-              initialExperienceList: widget.initialCV?['work_experience'] ?? [],
-              /*onChanged: (result) {
-          pendingData = {'work_experience': result};
-        },*/
+              initialExperienceList: workList,
             ),
           ),
         );
+case 'references':
+        final raw = widget.initialCV?[type];
+        List<Map<String, dynamic>> referencesList = [];
 
+        if (raw is String) {
+          try {
+            referencesList = List<Map<String, dynamic>>.from(jsonDecode(raw));
+          } catch (_) {}
+        } else if (raw is List) {
+          referencesList = List<Map<String, dynamic>>.from(raw);
+        }
+
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: CVReferenceSettings(
+              formKey: _referenceFormKey,
+              initialReferences: referencesList,
+            ),
+          ),
+        );
       case 'default':
         return QuillTextEditor(
           showAll: false,

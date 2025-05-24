@@ -44,38 +44,6 @@ class _EditCVPageState extends State<EditCVPage> {
     return CVPageData(user: user, cv: cv, isOwn: isOwn);
   }
 
-//Geçici data
-  final Map<String, dynamic> cvData = {
-    'profile': [
-      'Write a short brief introduction of just a few paragraphs explaining exactly who you are, your strengths and why you feel you are such a suitable candidate.',
-      'Currently looking for a suitable position with a reputable company.',
-    ],
-    'work_experience': [
-      {
-        'type': 'ship',
-        'position': 'Chief Officer',
-        'shipName': 'MV Horizon',
-        'company': 'Oceanic Lines',
-        'grt': '12,500',
-        'kw': '7,200',
-        'flag': 'Panama',
-        'shipType': 'Bulk Carrier',
-        'period': '2021 - 2023'
-      },
-      {
-        'type': 'office',
-        'title': 'Operations Manager - SeaGlobal Logistics',
-        'period': '2019 - 2021',
-        'details': [
-          'Managed daily shipping logistics and scheduling.',
-          'Oversaw compliance with international maritime regulations.',
-          'Trained new staff on safety procedures and operational tools.'
-        ]
-      }
-    ],
-    'references': ['Available on request.']
-  };
-
   Widget sectionBox({
     required String title,
     required Widget child,
@@ -172,6 +140,32 @@ class _EditCVPageState extends State<EditCVPage> {
               List<String>.from(jsonDecode(contactData['social'] ?? '[]'));
 
           final List<Widget> contactWidgets = [];
+
+          final referencesRaw = cv['data']?['references'];
+          List<dynamic> referencesList = [];
+
+          if (referencesRaw is String) {
+            try {
+              referencesList = jsonDecode(referencesRaw);
+            } catch (e) {
+              debugPrint("Error decoding references: $e");
+            }
+          } else if (referencesRaw is List) {
+            referencesList = referencesRaw;
+          }
+
+          final workExperienceRaw = cv['data']?['work_experience'];
+          List<dynamic> workExperienceList = [];
+
+          if (workExperienceRaw is String && workExperienceRaw.isNotEmpty) {
+            try {
+              workExperienceList = jsonDecode(workExperienceRaw);
+            } catch (e) {
+              debugPrint("Error decoding work experience: $e");
+            }
+          } else if (workExperienceRaw is List) {
+            workExperienceList = workExperienceRaw;
+          }
 
           if (address.trim().isNotEmpty) {
             contactWidgets
@@ -578,47 +572,53 @@ class _EditCVPageState extends State<EditCVPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text(
-                                        'Work Experience',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.black,
-                                          fontWeight: FontWeight.bold,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                      if (isOwn)
-                                        IconButton(
-                                          icon: const Icon(Icons.edit,
-                                              color: Colors.black),
-                                          onPressed: () {
-                                            showDialog(
-                                              context: context,
-                                              builder: (context) =>
-                                                  CVPopupEditor(
-                                                title: 'Edit Work Experience',
-                                                type: 'work_experience',
-                                                initialCV: cv['data'],
-                                                onSubmit: (value) {
-                                                  if (value == 'success') {
-                                                    setState(() {});
-                                                  }
-                                                },
-                                              ),
-                                            );
+                                  // Work Experience Section
+                                  _buildSimpleSection(
+                                    'Work Experience',
+                                    _buildWorkExperienceSection(
+                                        workExperienceList),
+                                    false,
+                                    isOwn: isOwn,
+                                    widget: true,
+                                    onEdit: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => CVPopupEditor(
+                                          title: 'Edit Work Experience',
+                                          type: 'work_experience',
+                                          initialCV: cv['data'],
+                                          onSubmit: (value) {
+                                            if (value == 'success') {
+                                              setState(() {});
+                                            }
                                           },
                                         ),
-                                    ],
+                                      );
+                                    },
                                   ),
+
                                   const SizedBox(height: 24),
-                                  _buildSection(
-                                    title: 'References',
-                                    paragraphs:
-                                        List<String>.from(cvData['references']),
+                                  _buildSimpleSection(
+                                    'References',
+                                    _buildReferenceSection(referencesList),
+                                    false,
+                                    isOwn: isOwn,
+                                    widget: true,
+                                    onEdit: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => CVPopupEditor(
+                                          title: 'Edit References',
+                                          type: 'references',
+                                          initialCV: cv['data'],
+                                          onSubmit: (value) {
+                                            if (value == 'success') {
+                                              setState(() {});
+                                            }
+                                          },
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
@@ -641,6 +641,140 @@ class _EditCVPageState extends State<EditCVPage> {
     );
   }
 
+  Widget _buildReferenceSection(List<dynamic> references) {
+    if (references.isEmpty) {
+      return const Text(
+        'No references added yet.',
+        style: TextStyle(color: Colors.black),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: references.map<Widget>((ref) {
+        final title = ref['title'] ?? '';
+        final name = ref['name'] ?? '';
+        final company = ref['company'] ?? '';
+        final contact = ref['contact'] ?? '';
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$title: $name',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Colors.black)),
+              if (company.isNotEmpty)
+                Text('Company: $company',
+                    style: const TextStyle(color: Colors.black)),
+              if (contact.isNotEmpty)
+                Text('Contact: $contact',
+                    style: const TextStyle(color: Colors.black)),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildWorkExperienceSection(List<dynamic> experiences) {
+    if (experiences.isEmpty) {
+      return const Text('No work experience added yet.',
+          style: TextStyle(color: Colors.black));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: experiences.map<Widget>((exp) {
+        final type = exp['type'] ?? '';
+        final position =
+            exp['position_name'] ?? exp['position'] ?? exp['title'] ?? '';
+        final period = exp['period'] ?? '';
+        final company = exp['company'] ?? '';
+        final shipName = exp['shipName'] ?? '';
+        final flag = exp['flag'] ?? '';
+        final shipType = exp['shipType'] ?? '';
+        final grt = exp['grt'] ?? '';
+        final kw = exp['kw'] ?? '';
+        final details = exp['details'] ?? [];
+
+        // Ortak Başlık
+        final header = Text(
+          '$position (${period.isNotEmpty ? period : 'N/A'})',
+          style:
+              const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+        );
+
+        // Gemiyse yan yana gemi özellikleri
+        Widget shipDetails = Container();
+        if (type == 'sea') {
+          shipDetails = Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                if (shipName.isNotEmpty)
+                  Text('Ship: $shipName',
+                      style: const TextStyle(color: Colors.black)),
+                if (flag.isNotEmpty)
+                  Text('Flag: $flag',
+                      style: const TextStyle(color: Colors.black)),
+                if (shipType.isNotEmpty)
+                  Text('Type: $shipType',
+                      style: const TextStyle(color: Colors.black)),
+                if (grt.isNotEmpty)
+                  Text('GRT: $grt',
+                      style: const TextStyle(color: Colors.black)),
+                if (kw.isNotEmpty)
+                  Text('KW: $kw', style: const TextStyle(color: Colors.black)),
+              ],
+            ),
+          );
+        }
+
+        // Office için sadece company
+        Widget officeDetails = Container();
+        if (type == 'office' && company.isNotEmpty) {
+          officeDetails = Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text('Company: $company',
+                style: const TextStyle(color: Colors.black)),
+          );
+        }
+
+        // Description kısmı (details) hep altta
+        Widget detailsSection = Container();
+        if (details is List && details.isNotEmpty) {
+          detailsSection = Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: details.map<Widget>((d) {
+                return Text('• $d',
+                    style: const TextStyle(color: Colors.black));
+              }).toList(),
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              header,
+              if (type == 'sea') shipDetails,
+              if (type == 'office') officeDetails,
+              if (detailsSection is! Container) detailsSection,
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
   Widget _buildSkill(String label, double value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -657,27 +791,6 @@ class _EditCVPageState extends State<EditCVPage> {
       ],
     );
   }
-
-  Widget _buildSection(
-      {required String title, required List<String> paragraphs}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title,
-            style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-                decoration: TextDecoration.underline)),
-        const SizedBox(height: 10),
-        ...paragraphs.map((p) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(p, style: const TextStyle(color: Colors.black)),
-            )),
-      ],
-    );
-  }
-
   Widget _buildSimpleSection(
     String title,
     dynamic content,
