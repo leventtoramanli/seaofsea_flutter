@@ -1,14 +1,17 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-//import 'package:flutter_exif_plugin/flutter_exif_plugin.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/dynamic_file_provider.dart';
-//import 'package:seaofsea/widgets/custom_image_picker.dart';
 
 class DynamicCustomForm extends StatefulWidget {
   final List<Map<String, dynamic>> config;
+  final void Function(Map<String, dynamic>)? onSubmit;
 
-  const DynamicCustomForm({required this.config, super.key});
+  const DynamicCustomForm({
+    required this.config,
+    super.key,
+    this.onSubmit,
+  });
 
   @override
   State<DynamicCustomForm> createState() => _DynamicCustomFormState();
@@ -23,10 +26,16 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
   final Map<String, String?> fileValues = {};
   final Map<String, String?> imageValues = {};
 
+  bool _submittedOnce = false;
+
   @override
   void dispose() {
-    Provider.of<DynamicFieldProvider>(context, listen: false)
-        .disposeControllers();
+    if (mounted) {
+      try {
+        Provider.of<DynamicFieldProvider>(context, listen: false)
+            .disposeControllers();
+      } catch (_) {}
+    }
     controllers.forEach((key, controller) => controller.dispose());
     super.dispose();
   }
@@ -54,6 +63,26 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
           formFields.add(buildDatePickerField(field, dropdownValues));
         } else if (field['type'] == 'multilineText') {
           formFields.add(buildMultilineTextField(field, controllers));
+        } else if (field['type'] == 'submitTrigger') {
+          if (widget.onSubmit != null && !_submittedOnce) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              final isValid = _formKey.currentState?.validate() ?? false;
+              if (!isValid) return;
+              final result = <String, dynamic>{};
+              controllers.forEach((k, v) => result[k] = v.text);
+              dropdownValues.forEach((k, v) => result[k] = v);
+              switchValues.forEach((k, v) => result[k] = v);
+              checkboxValues.forEach((k, v) => result[k] = v);
+              fileValues.forEach((k, v) => result[k] = v);
+              imageValues.forEach((k, v) => result[k] = v);
+              if (result.values
+                  .any((v) => v != null && v.toString().trim().isNotEmpty)) {
+                widget.onSubmit!(result);
+              }
+            });
+          }
+          continue;
         } else {
           formFields.add(buildTextField(field, controllers));
         }
@@ -62,29 +91,29 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
         var button = item['button'];
         formFields.add(
           ElevatedButton.icon(
-            onPressed: button['onTap'] ??
-                () {
-                  if (_formKey.currentState!.validate()) {
-                    controllers.forEach((key, controller) {
-                      debugPrint('$key: ${controller.text}');
-                    });
-                    dropdownValues.forEach((key, value) {
-                      debugPrint('$key: $value');
-                    });
-                    checkboxValues.forEach((key, value) {
-                      debugPrint('$key: $value');
-                    });
-                    switchValues.forEach((key, value) {
-                      debugPrint('$key: $value');
-                    });
-                    fileValues.forEach((key, value) {
-                      debugPrint('$key: $value');
-                    });
-                    imageValues.forEach((key, value) {
-                      debugPrint('$key: $value');
-                    });
-                  }
-                },
+            onPressed: () {
+              setState(() => _submittedOnce = true);
+              final valid = _formKey.currentState?.validate() ?? false;
+              if (!valid) return;
+              controllers.forEach((key, controller) {
+                debugPrint('$key: ${controller.text}');
+              });
+              dropdownValues.forEach((key, value) {
+                debugPrint('$key: $value');
+              });
+              checkboxValues.forEach((key, value) {
+                debugPrint('$key: $value');
+              });
+              switchValues.forEach((key, value) {
+                debugPrint('$key: $value');
+              });
+              fileValues.forEach((key, value) {
+                debugPrint('$key: $value');
+              });
+              imageValues.forEach((key, value) {
+                debugPrint('$key: $value');
+              });
+            },
             icon: button['icon'] ?? const Icon(Icons.send),
             label: Text(button['label'] ?? 'Button'),
           ),
@@ -95,6 +124,9 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
 
     return Form(
       key: _formKey,
+      autovalidateMode: _submittedOnce
+          ? AutovalidateMode.onUserInteraction
+          : AutovalidateMode.disabled,
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -120,7 +152,7 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
         border: const OutlineInputBorder(),
       ),
       validator: (value) {
-        if (value == null || value.isEmpty) {
+        if ((field['required'] ?? true) && (value == null || value.isEmpty)) {
           return field['validationMessage'] ?? 'Please select a value';
         }
         return null;
@@ -162,7 +194,7 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
         border: const OutlineInputBorder(),
       ),
       validator: (value) {
-        if (value == null || value.isEmpty) {
+        if ((field['required'] ?? true) && (value == null || value.isEmpty)) {
           return field['validationMessage'] ?? 'This field is required';
         }
         return null;
@@ -222,9 +254,15 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
                   onPressed: () => provider.removeField(fieldName, index),
                 ),
               ),
+              validator: (value) {
+                if ((field['required'] ?? true) &&
+                    (value == null || value.isEmpty)) {
+                  return field['validationMessage'] ?? 'This field is required';
+                }
+                return null;
+              },
             ),
           );
-          // ignore: unnecessary_to_list_in_spreads
         }).toList(),
         Align(
           alignment: Alignment.centerLeft,
@@ -260,6 +298,14 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
           },
           child: Text(field['label'] ?? 'Choose File'),
         ),
+        if ((field['required'] ?? true) && fileValues[field['name']] == null)
+          const Padding(
+            padding: EdgeInsets.only(top: 8.0),
+            child: Text(
+              'This field is required',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
         if (fileValues[field['name']] != null)
           Padding(
             padding: const EdgeInsets.only(top: 8.0),
@@ -285,17 +331,6 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8.0),
-        /*CustomImagePicker(
-          aspectRatio: field['aspectRatio'] ?? 1.0,
-          meta:{},
-          onImagePicked: (file) {
-            if (file != null) {
-              setState(() {
-                imageValues[field['name']] = file.path; // Seçilen resmi kaydet
-              });
-            }
-          },
-        ),*/
         if (imageValues[field['name']] != null)
           Padding(
             padding: const EdgeInsets.only(top: 8.0),
@@ -318,39 +353,54 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
   }
 
   Widget buildDatePickerField(
-      Map<String, dynamic> field, Map<String, String?> dateValues) {
-    dateValues[field['name']] = null;
+    Map<String, dynamic> field,
+    Map<String, String?> dateValues,
+  ) {
+    final name = field['name'];
+    final controller = TextEditingController(text: dateValues[name]);
 
-    return TextFormField(
-      readOnly: true,
-      decoration: InputDecoration(
-        labelText: field['label'] ?? 'Select Date',
-        hintText: field['hint'] ?? 'yyyy-mm-dd',
-        border: const OutlineInputBorder(),
-      ),
-      onTap: () async {
-        DateTime? selectedDate = await showDatePicker(
-          context: context,
-          initialDate: DateTime.now(),
-          firstDate: DateTime(1900),
-          lastDate: DateTime(2100),
+    return StatefulBuilder(
+      builder: (context, setState) {
+        return TextFormField(
+          controller: controller,
+          readOnly: true,
+          decoration: InputDecoration(
+            labelText: field['label'] ?? 'Select Date',
+            hintText: field['hint'] ?? 'yyyy-mm-dd',
+            border: const OutlineInputBorder(),
+          ),
+          onTap: () async {
+            DateTime? selectedDate = await showDatePicker(
+              context: context,
+              initialDate: DateTime.now(),
+              firstDate: DateTime(1900),
+              lastDate: DateTime(2100),
+            );
+            if (selectedDate != null) {
+              final formattedDate =
+                  selectedDate.toIso8601String().split('T')[0];
+              setState(() {
+                controller.text = formattedDate;
+                dateValues[name] = formattedDate;
+              });
+            }
+          },
+          validator: (value) {
+            if ((field['required'] ?? true) &&
+                (value == null || value.isEmpty)) {
+              return field['validationMessage'] ?? 'Please select a date';
+            }
+            return null;
+          },
         );
-        if (selectedDate != null) {
-          dateValues[field['name']] =
-              selectedDate.toIso8601String().split('T')[0];
-        }
-      },
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return field['validationMessage'] ?? 'Please select a date';
-        }
-        return null;
       },
     );
   }
 
-  Widget buildMultilineTextField(Map<String, dynamic> field,
-      Map<String, TextEditingController> controllers) {
+  Widget buildMultilineTextField(
+    Map<String, dynamic> field,
+    Map<String, TextEditingController> controllers,
+  ) {
     TextEditingController controller = TextEditingController();
     controllers[field['name']] = controller;
 
@@ -363,7 +413,7 @@ class _DynamicCustomFormState extends State<DynamicCustomForm> {
         border: const OutlineInputBorder(),
       ),
       validator: (value) {
-        if (value == null || value.isEmpty) {
+        if ((field['required'] ?? true) && (value == null || value.isEmpty)) {
           return field['validationMessage'] ?? 'This field is required';
         }
         return null;

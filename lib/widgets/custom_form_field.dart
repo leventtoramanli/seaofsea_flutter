@@ -9,7 +9,7 @@ class CustomFormField extends StatelessWidget {
   final String label;
   final String hint;
   final Icon icon;
-  final String validationMessage;
+  final String? validationMessage;
   final bool isPassword;
   final bool isEmail;
   final bool isNumeric;
@@ -18,6 +18,9 @@ class CustomFormField extends StatelessWidget {
   final bool isUrl;
   final BuildContext? context;
   final int maxLines;
+  final bool isRequired;
+  final VoidCallback? onFieldSubmitted;
+  final bool showField;
 
   const CustomFormField({
     super.key,
@@ -26,7 +29,7 @@ class CustomFormField extends StatelessWidget {
     required this.label,
     required this.hint,
     required this.icon,
-    required this.validationMessage,
+    this.validationMessage,
     this.isPassword = false,
     this.isEmail = false,
     this.isNumeric = false,
@@ -35,10 +38,14 @@ class CustomFormField extends StatelessWidget {
     this.isUrl = false,
     this.context,
     this.maxLines = 1,
+    this.isRequired = true,
+    this.onFieldSubmitted,
+    this.showField = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (!showField) return const SizedBox.shrink();
     bool obsText = isPassword;
 
     return StatefulBuilder(
@@ -113,19 +120,19 @@ class CustomFormField extends StatelessWidget {
                   ? [FilteringTextInputFormatter.digitsOnly]
                   : null,
           validator: (value) {
-            if (value == null || value.isEmpty) {
+            if (isRequired && (value == null || value.isEmpty)) {
               return validationMessage;
-            } else if (isPassword && value.length < 6) {
+            } else if (isPassword && value!.length < 6) {
               return 'Password must be at least 6 characters';
             } else if (isEmail &&
-                !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
+                !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value!)) {
               return 'Please enter a valid email';
             } else if (isPhone &&
-                !RegExp(r'^\+?[0-9]{7,15}$').hasMatch(value)) {
+                !RegExp(r'^\+?[0-9]{7,15}$').hasMatch(value!)) {
               return 'Please enter a valid phone number';
             } else if (isUrl &&
                 !RegExp(r'^(https?:\/\/)?([\w\-]+\.)+[\w\-]{2,}(\/[\w\-]*)*\/?$')
-                    .hasMatch(value)) {
+                    .hasMatch(value!)) {
               return 'Please enter a valid website URL';
             }
             return null;

@@ -1,12 +1,18 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/services/custom_text_editor.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/views/user_settings/contact_form_section_cv.dart';
+import 'package:seaofsea/views/user_settings/cv_education_setting.dart';
+import 'package:seaofsea/views/user_settings/cv_work_experience_settings.dart';
+import 'package:seaofsea/views/user_settings/expertice_form_section_cv.dart';
 
 class CVPopupEditor extends StatefulWidget {
   final String title;
   final String? initialText;
+  final bool saveButton;
   final Map<String, dynamic>? initialCV;
   final String? type;
   final Function(String) onSubmit;
@@ -16,6 +22,7 @@ class CVPopupEditor extends StatefulWidget {
     this.initialCV,
     required this.title,
     required this.onSubmit,
+    this.saveButton = true,
     this.initialText,
     this.type = 'default',
   });
@@ -26,6 +33,8 @@ class CVPopupEditor extends StatefulWidget {
 
 class _CVPopupEditorState extends State<CVPopupEditor> {
   final GlobalKey<QuillTextEditorState> _editorKey = GlobalKey();
+  final GlobalKey<FormState> _educationFormKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _workFormKey = GlobalKey<FormState>();
 
   String content = '';
   Map<String, dynamic> contactData = {};
@@ -38,6 +47,9 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
   }
 
   void _handleSubmit([String? updatedText]) async {
+    debugPrint('>>>> HANDLE SUBMIT STARTED');
+    debugPrint('type: ${widget.type}');
+    debugPrint('pendingData: $pendingData');
     final api = Provider.of<ApiManager>(context, listen: false);
 
     if (widget.type == 'default' ||
@@ -55,18 +67,31 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
       if (response['success'] == true) {
         widget.onSubmit(content);
         setState(() {});
-        Navigator.pop(context);
+        if (mounted) {
+          Navigator.pop(context);
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response['message'] ?? 'Save failed')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response['message'] ?? 'Save failed')),
+          );
+        }
       }
       return;
     }
 
-    debugPrint('Pending data: $pendingData');
+    if (widget.type == 'education') {
+      final state = _educationFormKey.currentState?.context
+          .findAncestorStateOfType<CVEducationSettingsState>();
+      final result = state?.getData();
+      if (result == null) return; // geçersiz veri
 
-    // Tüm diğer tipler (contact, skills, education, etc.)
+      pendingData = {
+        'education': result,
+      };
+    }
+
+    debugPrint('Pending data: $pendingData');
     final response = await api.post(context, 'update_cv', {
       widget.type!: pendingData, // örnek: { "contact": {...} }
     });
@@ -75,12 +100,16 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
 
     if (response['success'] == true) {
       widget.onSubmit("success");
-      Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+      }
       setState(() {});
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(response['message'] ?? 'Save failed')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response['message'] ?? 'Save failed')),
+        );
+      }
     }
   }
 
@@ -111,6 +140,85 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
             ),
           ),
         );
+      case 'skills':
+        List<ExpertiseItem> initialItems = [];
+
+        final raw = widget.initialCV?[type];
+        List<dynamic> dataList = [];
+
+        if (raw is String) {
+          try {
+            dataList = jsonDecode(raw);
+          } catch (_) {
+            dataList = [];
+          }
+        } else if (raw is List) {
+          dataList = raw;
+        }
+
+        initialItems = dataList
+            .map((e) => ExpertiseItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: ExpertiseFormSection(
+              initialItems: initialItems,
+              onChanged: (items) {
+                pendingData = {
+                  'skills': items
+                      .map((e) => {
+                            ...e.toJson(),
+                            'percentage': e.percentage,
+                          })
+                      .toList(),
+                };
+              },
+            ),
+          ),
+        );
+      case 'education':
+        final raw = widget.initialCV?[type];
+        List<Map<String, dynamic>> educationList = [];
+
+        if (raw is String) {
+          try {
+            educationList = List<Map<String, dynamic>>.from(jsonDecode(raw));
+          } catch (_) {
+            educationList = [];
+          }
+        } else if (raw is List) {
+          educationList = List<Map<String, dynamic>>.from(raw);
+        }
+
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: CVEducationSettings(
+              formKey: _educationFormKey,
+              initialEducationList: educationList,
+              onChanged: (result) {
+                pendingData = {
+                  'education': result,
+                };
+              },
+            ),
+          ),
+        );
+      case 'work_experience':
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: CVWorkExperienceSettings(
+              formKey: _workFormKey,
+              initialExperienceList: widget.initialCV?['work_experience'] ?? [],
+              /*onChanged: (result) {
+          pendingData = {'work_experience': result};
+        },*/
+            ),
+          ),
+        );
+
       case 'default':
         return QuillTextEditor(
           showAll: false,
@@ -154,10 +262,15 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
-          onPressed: () => _handleSubmit(content),
-          child: const Text('Save'),
-        ),
+        widget.saveButton
+            ? ElevatedButton(
+                onPressed: () {
+                  debugPrint('Content: $content');
+                  _handleSubmit(content);
+                },
+                child: const Text('Save'),
+              )
+            : Container(),
       ],
     );
   }

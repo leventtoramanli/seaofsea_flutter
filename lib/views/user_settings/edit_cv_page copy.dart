@@ -578,41 +578,99 @@ class _EditCVPageState extends State<EditCVPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Text(
-                                        'Work Experience',
-                                        style: TextStyle(
+                                  const Text('Work Experience',
+                                      style: TextStyle(
                                           fontSize: 16,
                                           color: Colors.black,
                                           fontWeight: FontWeight.bold,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                      if (isOwn)
-                                        IconButton(
-                                          icon: const Icon(Icons.edit,
-                                              color: Colors.black),
-                                          onPressed: () {
-                                            showDialog(
-                                              context: context,
-                                              builder: (context) =>
-                                                  CVPopupEditor(
-                                                title: 'Edit Work Experience',
-                                                type: 'work_experience',
-                                                initialCV: cv['data'],
-                                                onSubmit: (value) {
-                                                  if (value == 'success') {
-                                                    setState(() {});
-                                                  }
-                                                },
+                                          decoration:
+                                              TextDecoration.underline)),
+                                  const SizedBox(height: 10),
+                                  ...List<Map<String, dynamic>>.from(
+                                          cvData['work_experience'])
+                                      .map(
+                                    (entry) {
+                                      if (entry['type'] == 'ship') {
+                                        return Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 12),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                '${entry['position']} - ${entry['shipName']} / ${entry['company']} (${entry['period']})',
+                                                style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.black),
                                               ),
-                                            );
-                                          },
-                                        ),
-                                    ],
+                                              const SizedBox(height: 6),
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.start,
+                                                children: [
+                                                  Expanded(
+                                                      child: Text(
+                                                          'GRT: ${entry['grt']}',
+                                                          style:
+                                                              const TextStyle(
+                                                                  color: Colors
+                                                                      .black))),
+                                                  Expanded(
+                                                      child: Text(
+                                                          'KW: ${entry['kw']}',
+                                                          style:
+                                                              const TextStyle(
+                                                                  color: Colors
+                                                                      .black))),
+                                                  Expanded(
+                                                      child: Text(
+                                                          'Flag: ${entry['flag']}',
+                                                          style:
+                                                              const TextStyle(
+                                                                  color: Colors
+                                                                      .black))),
+                                                  Expanded(
+                                                      child: Text(
+                                                          'Type: ${entry['shipType']}',
+                                                          style:
+                                                              const TextStyle(
+                                                                  color: Colors
+                                                                      .black))),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      } else {
+                                        return Padding(
+                                          padding:
+                                              const EdgeInsets.only(bottom: 12),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                  '${entry['title']} (${entry['period']})',
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: Colors.black)),
+                                              const SizedBox(height: 4),
+                                              ...List<String>.from(
+                                                      entry['details'])
+                                                  .map(
+                                                (e) => Text(
+                                                  '• $e',
+                                                  style: const TextStyle(
+                                                      color: Colors.black),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }
+                                    },
                                   ),
                                   const SizedBox(height: 24),
                                   _buildSection(
