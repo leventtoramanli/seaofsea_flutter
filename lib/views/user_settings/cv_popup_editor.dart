@@ -6,6 +6,7 @@ import 'package:seaofsea/services/custom_text_editor.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/views/user_settings/contact_form_section_cv.dart';
 import 'package:seaofsea/views/user_settings/cv_education_setting.dart';
+import 'package:seaofsea/views/user_settings/cv_language_settings.dart';
 import 'package:seaofsea/views/user_settings/cv_referance_setting.dart';
 import 'package:seaofsea/views/user_settings/cv_work_experience_settings.dart';
 import 'package:seaofsea/views/user_settings/expertice_form_section_cv.dart';
@@ -188,6 +189,43 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
               onChanged: (items) {
                 pendingData = {
                   'skills': items
+                      .map((e) => {
+                            ...e.toJson(),
+                            'percentage': e.percentage,
+                          })
+                      .toList(),
+                };
+              },
+            ),
+          ),
+        );
+      case 'language':
+        List<LanguageItem> initialItems = [];
+
+        final raw = widget.initialCV?[type];
+        List<dynamic> dataList = [];
+
+        if (raw is String) {
+          try {
+            dataList = jsonDecode(raw);
+          } catch (_) {
+            dataList = [];
+          }
+        } else if (raw is List) {
+          dataList = raw;
+        }
+
+        initialItems = dataList
+            .map((e) => LanguageItem.fromJson(e as Map<String, dynamic>))
+            .toList();
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: LanguageFormSection(
+              initialItems: initialItems,
+              onChanged: (items) {
+                pendingData = {
+                  'language': items
                       .map((e) => {
                             ...e.toJson(),
                             'percentage': e.percentage,

@@ -208,6 +208,19 @@ class _EditCVPageState extends State<EditCVPage> {
             skillsList = skillsRaw;
           }
 
+          final languagesRaw = cv['data']?['language'];
+          List<dynamic> languagesList = [];
+
+          if (languagesRaw is String) {
+            try {
+              languagesList = jsonDecode(languagesRaw);
+            } catch (_) {
+              languagesList = [];
+            }
+          } else if (languagesRaw is List) {
+            languagesList = languagesRaw;
+          }
+
           final educationRaw = cv['data']?['education'];
           List<dynamic> educationList = [];
 
@@ -530,7 +543,48 @@ class _EditCVPageState extends State<EditCVPage> {
                                       );
                                     },
                                   ),
-
+                                  const SizedBox(height: 20),
+                                  _buildSimpleSection(
+                                    'Languages',
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: languagesList.isEmpty
+                                          ? [
+                                              const Text(
+                                                'No languages added yet.',
+                                                style: TextStyle(
+                                                    color: Colors.grey),
+                                              )
+                                            ]
+                                          : languagesList.map<Widget>((e) {
+                                              final name = e['name'] ?? '';
+                                              final percentage =
+                                                  (e['percentage'] ?? 0)
+                                                      .toDouble();
+                                              return _buildSkill(
+                                                  name, percentage ?? 0);
+                                            }).toList(),
+                                    ),
+                                    true,
+                                    isOwn: isOwn,
+                                    widget: true,
+                                    isColored: Colors.white,
+                                    onEdit: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => CVPopupEditor(
+                                          title: 'Edit Languages',
+                                          type: 'language',
+                                          initialCV: cv['data'],
+                                          onSubmit: (value) {
+                                            if (value == 'success')
+                                              setState(() {});
+                                          },
+                                        ),
+                                      );
+                                    },
+                                  ),
                                   const SizedBox(height: 20),
                                   _buildSimpleSection(
                                     'Education',
