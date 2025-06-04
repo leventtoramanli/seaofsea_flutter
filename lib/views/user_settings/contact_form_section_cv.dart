@@ -13,6 +13,7 @@ class ContactFormSection extends StatefulWidget {
   final int? initialCountryId;
   final int? initialCityId;
   final String? initialAddress;
+  final String? initialZipCode;
   final List<String>? initialPhones;
   final List<String>? initialEmails;
   final List<Map<String, String>>? initialSocials;
@@ -25,6 +26,7 @@ class ContactFormSection extends StatefulWidget {
     this.initialCountryId,
     this.initialCityId,
     this.initialAddress,
+    this.initialZipCode,
     this.initialPhones,
     this.initialEmails,
     this.initialSocials,
@@ -38,6 +40,7 @@ class _ContactFormSectionState extends State<ContactFormSection> {
   final TextEditingController _countryController = TextEditingController();
   final TextEditingController _cityController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _zipCodeController = TextEditingController();
 
   List<TextEditingController> phoneControllers = [TextEditingController()];
   List<TextEditingController> emailControllers = [TextEditingController()];
@@ -50,6 +53,7 @@ class _ContactFormSectionState extends State<ContactFormSection> {
     _countryController.dispose();
     _cityController.dispose();
     _addressController.dispose();
+    _zipCodeController.dispose();
     for (var c in phoneControllers) c.dispose();
     _emailController?.dispose();
     for (var c in socialControllers) c.dispose();
@@ -61,6 +65,7 @@ class _ContactFormSectionState extends State<ContactFormSection> {
       'country_id': selectedCountryId,
       'city_id': selectedCityId,
       'address': _addressController.text.trim(),
+      'zip_code': _zipCodeController.text.trim(),
       'email': [_emailController?.text],
       'phone': phoneControllers.map((c) => c.text).toList(),
       'social': socialControllers.map((c) => c.text).toList(),
@@ -80,6 +85,7 @@ class _ContactFormSectionState extends State<ContactFormSection> {
     selectedCountryId = contact['country_id'];
     selectedCityId = contact['city_id'];
     _addressController.text = contact['address'] ?? '';
+    _zipCodeController.text = contact['zip_code'] ?? '';
 
     // ✅ Email
     final rawEmail = contact['email'];
@@ -369,6 +375,18 @@ class _ContactFormSectionState extends State<ContactFormSection> {
               labelStyle: TextStyle(
                   color: color.isDarkMode ? Colors.white : Colors.black),
               border: const OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: _zipCodeController,
+          onChanged: (_) => _notifyChange(),
+          decoration: InputDecoration(
+            labelText: 'Zip / Post Code',
+            labelStyle: TextStyle(
+              color: color.isDarkMode ? Colors.white : Colors.black,
+            ),
+            border: const OutlineInputBorder(),
+          ),
         ),
         const SizedBox(height: 10),
         TextFormField(

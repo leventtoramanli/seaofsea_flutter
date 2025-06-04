@@ -43,6 +43,7 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
           'shipType': TextEditingController(text: item['shipType'] ?? ''),
           'title': TextEditingController(text: item['title'] ?? ''),
           'period': TextEditingController(text: item['period'] ?? ''),
+          'period1': TextEditingController(text: item['period1'] ?? ''),
         });
       }
     } else {
@@ -63,6 +64,7 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
         'shipType': '',
         'title': '',
         'period': '',
+        'period1': '',
         'details': [],
       });
       _expanded.add(true);
@@ -76,6 +78,7 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
         'shipType': TextEditingController(),
         'title': TextEditingController(),
         'period': TextEditingController(),
+        'period1': TextEditingController(),
       });
     });
   }
@@ -107,6 +110,7 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
           _controllers[i]['shipType']?.text ?? '';
       _workExperienceList[i]['title'] = _controllers[i]['title']?.text ?? '';
       _workExperienceList[i]['period'] = _controllers[i]['period']?.text ?? '';
+      _workExperienceList[i]['period1'] = _controllers[i]['period1']?.text ?? '';
     }
 
     return _workExperienceList;
@@ -358,6 +362,17 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
                     hint: 'Enter period',
                     icon: const Icon(Icons.timeline),
                     validationMessage: 'Period is required',
+                    isDate: true,
+                  ),
+                  const SizedBox(height: 12),
+                  CustomFormField(
+                    controller: _controllers[i]['period1']!,
+                    themeProvider: themeProvider,
+                    label: 'Period',
+                    hint: 'Enter end of period',
+                    icon: const Icon(Icons.timeline),
+                    validationMessage: 'Period is required',
+                    isDate: true,
                   ),
                   const SizedBox(height: 12),
                 ],

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 // ignore: unused_import
 import 'package:seaofsea/utils/auth_provider.dart';
+import 'package:seaofsea/views/companies/company_admin_page.dart';
 import 'package:seaofsea/views/user_settings/edit_cv_page.dart';
 import 'package:seaofsea/views/user_settings/profile_general_tab.dart';
 
@@ -21,6 +22,9 @@ class _ProfilePageState extends State<ProfilePage> {
   TextEditingController _bioController = TextEditingController();
   Map<String, dynamic> infoData = {};
   bool isUpdating = false;
+
+  bool hasCompanyAdminOrEditor = false;
+  bool multipleCompanies = false;
 
   Future<void> fetchUserData() async {
     final apiManager = Provider.of<ApiManager>(context, listen: false);
@@ -47,6 +51,26 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> checkUserCompanies() async {
+    final api = Provider.of<ApiManager>(context, listen: false);
+    final response = await api.post(context, 'get_user_companies', {});
+
+    if (response != null && response['success'] == true) {
+      final companies = response['data'] as List<dynamic>? ?? [];
+      final adminEditorCompanies = companies
+          .where((company) =>
+              company['role'] == 'admin' || company['role'] == 'editor')
+          .toList();
+
+      if (adminEditorCompanies.isNotEmpty) {
+        setState(() {
+          hasCompanyAdminOrEditor = true;
+          multipleCompanies = adminEditorCompanies.length > 1;
+        });
+      }
+    }
+  }
+
   Future<void> updateUserData() async {
     setState(() => isUpdating = true);
     final apiManager = Provider.of<ApiManager>(context, listen: false);
@@ -59,7 +83,7 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     setState(() => isUpdating = false);
     if (response != null && response['success'] == true) {
-      await fetchUserData(); // Güncellenmiş veriyi tekrar çek
+      await fetchUserData();
       // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Profile updated successfully!")),
@@ -74,27 +98,34 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     fetchUserData();
+    checkUserCompanies();
   }
 
   @override
   Widget build(BuildContext context) {
+    final List<Tab> menuTabs = [
+      Tab(icon: Icon(Icons.person), text: 'General'),
+      Tab(icon: Icon(Icons.description), text: 'CV'),
+    ];
+
+    final List<Widget> menuViews = [
+      ProfileGeneralTab(),
+      EditCVPage(),
+    ];
+
+    if (hasCompanyAdminOrEditor) {
+      final icon = multipleCompanies ? Icons.business : Icons.apartment;
+      final label = multipleCompanies ? 'Companies' : 'Company';
+      menuTabs.add(Tab(icon: Icon(icon), text: label));
+      menuViews.add(const CompanyAdminPage());
+    }
     return DefaultTabController(
-      length: 2,
+      length: menuTabs.length,
       child: Column(
-        children: const [
-          TabBar(
-            tabs: [
-              Tab(icon: Icon(Icons.person), text: 'General'),
-              Tab(icon: Icon(Icons.description), text: 'CV'),
-            ],
-          ),
+        children: [
+          TabBar(tabs: menuTabs),
           Expanded(
-            child: TabBarView(
-              children: [
-                ProfileGeneralTab(),
-                EditCVPage()
-              ],
-            ),
+            child: TabBarView(children: menuViews),
           ),
         ],
       ),

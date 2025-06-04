@@ -1,0 +1,658 @@
+import 'dart:io';
+
+import 'package:dropdown_search/dropdown_search.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/utils/permission_gate.dart';
+import 'package:seaofsea/utils/theme_provider.dart';
+import 'package:seaofsea/views/companies/contact_field_definitions.dart';
+import 'package:seaofsea/widgets/custom_button.dart';
+import 'package:seaofsea/widgets/custom_form_field.dart';
+import 'package:seaofsea/widgets/custom_image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// Küçük icon butonlar için ortak yapı (ör. admin ayar butonları)
+Widget buildIconButton(IconData icon, VoidCallback onPressed, String tooltip) {
+  return IconButton(
+    icon: Icon(icon, size: 20),
+    onPressed: onPressed,
+    tooltip: tooltip,
+  );
+}
+
+/// Contact info ve diğer sekmeler için başlık satırı
+Widget buildSectionTitle(BuildContext context, IconData icon, String title) {
+  return Row(
+    children: [
+      Icon(icon, size: 20),
+      const SizedBox(width: 8),
+      SelectableText(
+        title,
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+    ],
+  );
+}
+/// Contact info içeriğinde kullanılan ortak ListTile
+Widget buildContactListTile({
+  required String label,
+  required String value,
+  VoidCallback? onTap,
+  List<Widget>? trailing,
+}) {
+  return ListTile(
+    dense: true,
+    contentPadding: EdgeInsets.zero,
+    title: Text(label),
+    subtitle: GestureDetector(
+      onTap: onTap,
+      child: SelectableText(
+        value,
+        style: const TextStyle(color: Colors.blue),
+      ),
+    ),
+    trailing: trailing != null
+        ? Row(mainAxisSize: MainAxisSize.min, children: trailing)
+        : null,
+  );
+}
+Widget buildHeader({
+  required BuildContext context,
+  required bool isDesktop,
+  required bool isTablet,
+  required bool isAdmin,
+  required bool isEditor,
+  required int companyId,
+  required String? logo,
+  required Widget adminButtons,
+  required Widget actionButtons,
+}) {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      buildCompanyLogo(context, companyId, logo),
+      Column(
+        children: [
+          if ((isDesktop || isTablet) && (isAdmin || isEditor)) adminButtons,
+          const SizedBox(height: 5),
+          actionButtons,
+        ],
+      ),
+    ],
+  );
+}
+
+Widget buildCompanyLogo(BuildContext context, int companyId, String? existingLogo) {
+  final imageUrl = (existingLogo != null && existingLogo.isNotEmpty)
+      ? '${Provider.of<ApiManager>(context, listen: false).baseUrl}/images/companies/logo/thumb/$existingLogo'
+      : null;
+
+  return FutureBuilder(
+    future: PermissionGate.check(
+      context: context,
+      permissionCode: 'company.update_logo',
+      entityId: companyId,
+    ),
+    builder: (context, snapshot) {
+      final hasPermission = snapshot.data == true;
+      return CustomImagePicker(
+        aspectRatio: 1,
+        existingImageUrl: imageUrl,
+        meta: {'type': 'company'},
+        iwidth: 80,
+        iheight: 80,
+        iradius: 40,
+        ishadow: true,
+        canEdit: hasPermission,
+        doUpload: hasPermission,
+        uploadEndpoint: 'upload_image_general',
+        uploadMeta: {
+          'type': 'company',
+          'folder': 'images/companies/logo/',
+          'prefix': 'c_$companyId',
+          'thumb': 'true',
+          'thumbSize': '128',
+        },
+        onUploaded: (uploadedFileName) async {
+          final api = Provider.of<ApiManager>(context, listen: false);
+          final updateResponse = await api.post(context, 'update_company', {
+            'company_id': companyId.toString(),
+            'logo': uploadedFileName,
+          });
+          if (updateResponse['success'] == true) {
+            // Bildirim göster ya da ilgili yeri güncelle
+          }
+        },
+        onImagePicked: (_, __) {}, // eski sistemde kullanılmıyor
+      );
+    },
+  );
+}
+
+Widget buildAdminButtons(BuildContext context, int companyId, Map<String, dynamic> companyData) {
+  return Row(
+    children: [
+      PermissionGate(
+        permissionCode: 'company.update',
+        entityId: companyId,
+        child: IconButton(
+          icon: const Icon(Icons.edit),
+          onPressed: () => Navigator.pushNamed(
+            context,
+            '/update_company',
+            arguments: companyData,
+          ),
+          tooltip: 'Edit Company',
+        ),
+      ),
+      PermissionGate(
+        permissionCode: 'company.view_members',
+        entityId: companyId,
+        child: IconButton(
+          icon: const Icon(Icons.group),
+          onPressed: () => Navigator.pushNamed(
+            context,
+            '/manage_company_users',
+            arguments: companyData,
+          ),
+          tooltip: 'Manage Users',
+        ),
+      ),
+      PermissionGate(
+        permissionCode: 'company.settings',
+        entityId: companyId,
+        child: IconButton(
+          icon: const Icon(Icons.settings),
+          onPressed: () => Navigator.pushNamed(
+            context,
+            '/company_settings',
+            arguments: companyData,
+          ),
+          tooltip: 'Company Settings',
+        ),
+      ),
+    ],
+  );
+}
+Widget buildActionButtons(BuildContext context, bool isViewer, bool isFollower, bool isEmployee, int companyId) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (isViewer || isFollower)
+        CustomButton(
+          label: 'Apply for a Job',
+          icon: Icons.work_outline,
+          onPressed: () {
+            Navigator.pushNamed(
+              context,
+              '/join_company',
+              arguments: {'company_id': companyId},
+            );
+          },
+        ),
+      if (isEmployee)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: ElevatedButton.icon(
+            onPressed: () {},
+            icon: const Icon(Icons.meeting_room),
+            label: const Text('Enter Workspace'),
+          ),
+        ),
+    ],
+  );
+}
+
+
+Map<String, List<Map<String, String>>> parseContactInfo(dynamic raw) {
+  if (raw == null || raw is! Map) return {};
+  final Map<String, List<Map<String, String>>> parsed = {};
+  for (final entry in raw.entries) {
+    final key = entry.key.toString();
+    final valueList = entry.value;
+    if (valueList is List) {
+      parsed[key] = valueList.map<Map<String, String>>((item) {
+        return {
+          'label': item['label']?.toString() ?? '',
+          'value': item['value']?.toString() ?? '',
+        };
+      }).toList();
+    }
+  }
+  return parsed;
+}
+
+Future<void> handleAddCompanyType({
+  required BuildContext context,
+  required List<Map<String, dynamic>> allTypes,
+  required List<int> selectedIds,
+  required Function(List<int>) onSelectedUpdated,
+}) async {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Select Company Types'),
+        content: SizedBox(
+          width: 400,
+          child: DropdownSearch<Map<String, dynamic>>.multiSelection(
+            items: allTypes,
+            selectedItems: selectedIds
+                .map((id) =>
+                    allTypes.firstWhere((t) => t['id'] == id, orElse: () => {}))
+                .where((e) => e.isNotEmpty)
+                .toList(),
+            itemAsString: (item) => item['name'] ?? 'Unnamed',
+            compareFn: (item, selected) => item['id'] == selected['id'],
+            popupProps: const PopupPropsMultiSelection.menu(
+              showSearchBox: true,
+              searchFieldProps: TextFieldProps(
+                decoration: InputDecoration(
+                  labelText: 'Search',
+                  prefixIcon: Icon(Icons.search),
+                ),
+              ),
+            ),
+            onChanged: (selected) {
+              onSelectedUpdated(selected.map((e) => e['id'] as int).toList());
+            },
+            dropdownDecoratorProps: const DropDownDecoratorProps(
+              dropdownSearchDecoration: InputDecoration(
+                labelText: 'Company Types',
+                contentPadding: EdgeInsets.all(12),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Save')),
+        ],
+      );
+    },
+  );
+}
+
+Future<void> updateCompanyTypesOnServer(
+  BuildContext context,
+  List<int> selectedIds,
+  int companyId,
+) async {
+  final api = context.read<ApiManager>();
+  final response = await api.post(context, 'update_company', {
+    'company_id': companyId,
+    'company_type_ids': selectedIds,
+  });
+
+  final message = response['success'] == true
+      ? 'Company types updated successfully.'
+      : '❌ ${response['message'] ?? 'Update failed.'}';
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
+Future<void> fetchCompanyTypes({
+  required BuildContext context,
+  required Function(List<Map<String, dynamic>>) onFetched,
+  List<int> filterIds = const [],
+}) async {
+  final api = context.read<ApiManager>();
+  final response = await api.post(context, 'get_company_types', {
+    if (filterIds.isNotEmpty) 'filter_ids': filterIds,
+  });
+
+  if (response['success'] == true && response['data'] is List) {
+    final items = response['data'] as List;
+    final safeList = items
+        .where((e) => e is Map && e['id'] != null && e['name'] != null)
+        .cast<Map<String, dynamic>>()
+        .toList();
+    onFetched(safeList);
+  } else {
+    onFetched([]);
+  }
+}
+
+Future<void> updateContactInfoOnServer({
+  required BuildContext context,
+  required int companyId,
+  required Map<String, List<Map<String, String>>> contactInfo,
+}) async {
+  final api = context.read<ApiManager>();
+  final response = await api.post(context, 'update_company', {
+    'company_id': companyId,
+    'contact_info': contactInfo,
+  });
+  final message = response['success'] == true
+      ? 'Contact info updated successfully.'
+      : 'Failed to update contact info.';
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+}
+
+Future<void> handleContactTap(
+  BuildContext context,
+  String category,
+  String value,
+) async {
+  Uri? uri;
+  switch (category) {
+    case 'phones':
+      showPhoneOptions(context, value);
+      return;
+    case 'emails':
+      uri = Uri(scheme: 'mailto', path: value);
+      break;
+    case 'websites':
+      uri = Uri.parse(value.startsWith('http') ? value : 'https://$value');
+      break;
+    case 'addresses':
+      final query =
+          value.replaceAll('.', '').trim().replaceAll(RegExp(r'\s+'), '+');
+      uri = Uri.parse('https://yandex.com/maps/?text=$query');
+      break;
+    default:
+      return;
+  }
+  await launchDirectly(context, uri.toString());
+}
+
+Future<void> launchDirectly(BuildContext context, String url) async {
+  try {
+    if (Platform.isWindows) {
+      await Process.run('start', [url], runInShell: true);
+    } else if (Platform.isMacOS) {
+      await Process.run('open', [url]);
+    } else if (Platform.isLinux) {
+      await Process.run('xdg-open', [url]);
+    } else if (Platform.isAndroid || Platform.isIOS) {
+      final uri = Uri.parse(url);
+      if (!await launchUrl(uri)) {
+        throw Exception('Could not launch $url');
+      }
+    } else {
+      throw UnsupportedError('Platform not supported');
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Failed to launch: $url')));
+  }
+}
+
+void showPhoneOptions(BuildContext context, String phoneNumber) {
+  showModalBottomSheet(
+    context: context,
+    builder: (context) {
+      return SafeArea(
+        child: Wrap(
+          children: [
+            if (Platform.isAndroid || Platform.isIOS)
+              ListTile(
+                leading: const Icon(Icons.phone),
+                title: const Text('Call'),
+                onTap: () async {
+                  final uri = Uri(scheme: 'tel', path: phoneNumber);
+                  try {
+                    await launchUrl(uri);
+                  } catch (_) {}
+                  Navigator.pop(context);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.copy),
+              title: const Text('Copy'),
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: phoneNumber));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Phone number copied to clipboard')));
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+Future<void> showContactDialog({
+  required BuildContext context,
+  required ThemeProvider themeProvider,
+  required String category,
+  Map<String, String>? item,
+  required Map<String, List<Map<String, String>>> contactInfo,
+  required Function(Map<String, List<Map<String, String>>>) onUpdate,
+}) async {
+  final def = contactFieldDefinitions[category] ?? {};
+  final labelController = TextEditingController(text: item?['label'] ?? '');
+  final valueController = TextEditingController(text: item?['value'] ?? '');
+  final isEditMode = item != null;
+
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: Text(
+            '${isEditMode ? "Edit" : "Add"} ${category[0].toUpperCase()}${category.substring(1)}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CustomFormField(
+              controller: labelController,
+              label: def['label'] ?? 'Label',
+              hint: def['hint'] ?? '',
+              icon: def['icon'] ?? const Icon(Icons.label),
+              validationMessage: 'Label cannot be empty',
+              maxLines: 1,
+              themeProvider: themeProvider,
+            ),
+            const SizedBox(height: 12),
+            CustomFormField(
+              controller: valueController,
+              label: def['valueLabel'] ?? 'Value',
+              hint: def['valueHint'] ?? '',
+              icon: def['valueIcon'] ?? const Icon(Icons.info),
+              validationMessage: 'Value cannot be empty',
+              isEmail: def['isEmail'] ?? false,
+              isPhone: def['isPhone'] ?? false,
+              isNumeric: def['isNumeric'] ?? false,
+              isUrl: def['isUrl'] ?? false,
+              maxLines: def['maxLines'] ?? 1,
+              themeProvider: themeProvider,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              final label = labelController.text.trim();
+              final value = valueController.text.trim();
+              if (label.isNotEmpty && value.isNotEmpty) {
+                if (isEditMode) {
+                  final index = contactInfo[category]?.indexOf(item);
+                  if (index != null && index != -1) {
+                    contactInfo[category]?[index] = {
+                      'label': label,
+                      'value': value,
+                    };
+                  }
+                } else {
+                  contactInfo.putIfAbsent(category, () => []);
+                  contactInfo[category]!.add({'label': label, 'value': value});
+                }
+                onUpdate(contactInfo);
+                Navigator.pop(context);
+              }
+            },
+            child: Text(isEditMode ? 'Update' : 'Add'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+IconData getIconForCategory(String category) {
+  switch (category.toLowerCase()) {
+    case 'phones':
+      return Icons.phone;
+    case 'emails':
+      return Icons.email;
+    case 'addresses':
+      return Icons.location_on;
+    case 'websites':
+      return Icons.language;
+    default:
+      return Icons.info_outline;
+  }
+}
+
+void deleteContactItem(
+  BuildContext context,
+  String category,
+  Map<String, String> item,
+  Map<String, List<Map<String, String>>> contactInfo,
+  Function(Map<String, List<Map<String, String>>>) onUpdate,
+) {
+  contactInfo[category]?.remove(item);
+  onUpdate(contactInfo);
+}
+
+Widget buildCompanyTypeSection(
+  List<Map<String, dynamic>> allTypes,
+  List<int> selectedIds,
+  bool isAdmin,
+  bool isEditor,
+  VoidCallback onAddPressed,
+) {
+  final sortedChips = selectedIds
+      .map((id) => allTypes.firstWhere(
+            (t) => t['id'] == id,
+            orElse: () => {'id': id, 'name': 'Unknown', 'description': ''},
+          ))
+      .toList()
+    ..sort((a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''));
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          const Icon(Icons.business, size: 20),
+          const SizedBox(width: 8),
+          const Text(
+            'Company Type:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          if (isAdmin || isEditor)
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              tooltip: 'Add Company Type',
+              onPressed: onAddPressed,
+            ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      if (selectedIds.isEmpty)
+        const Padding(
+          padding: EdgeInsets.only(left: 28),
+          child: Text('Not specified'),
+        )
+      else
+        Wrap(
+          spacing: 8,
+          children: sortedChips.map((matched) {
+            return Tooltip(
+              message: matched['description'] ?? '',
+              child: Chip(
+                label: Text(matched['name'] ?? 'Unknown'),
+              ),
+            );
+          }).toList(),
+        ),
+      const SizedBox(height: 16),
+    ],
+  );
+}
+Widget buildContactSection({
+  required BuildContext context,
+  required String userRole,
+  required Map<String, List<Map<String, String>>> contactInfo,
+  required void Function(String category) onAddPressed,
+  required void Function(String category, Map<String, String> item) onEditPressed,
+  required void Function(
+      String category,
+      Map<String, String> item,
+      Map<String, List<Map<String, String>>> updatedInfo,
+  ) onDeletePressed,
+  required void Function(String category, String value) onTap,
+}) {
+  final allCategories = ['phones', 'emails', 'addresses', 'websites'];
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: allCategories.map((category) {
+      final items = contactInfo[category] ?? [];
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(getIconForCategory(category), size: 18),
+              const SizedBox(width: 8),
+              SelectableText(
+                category[0].toUpperCase() + category.substring(1),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              if (userRole == 'admin' || userRole == 'editor')
+                GestureDetector(
+                  onTap: () => onAddPressed(category),
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 6),
+                    child: Icon(Icons.add_circle, size: 20),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(left: 32),
+              child: Text('-'),
+            )
+          else
+            ...items.map((item) {
+              final label = item['label'] ?? '';
+              final value = item['value'] ?? '';
+              final isPhone = category == 'phones';
+              final displayValue = isPhone
+                  ? (value.startsWith('+') ? value : '+$value')
+                  : value;
+
+              return buildContactListTile(
+                label: label,
+                value: displayValue,
+                onTap: () => onTap(category, displayValue),
+                trailing: (userRole == 'admin' || userRole == 'editor')
+                    ? [
+                        buildIconButton(Icons.edit, () => onEditPressed(category, item), 'Edit'),
+                        buildIconButton(Icons.delete, () => onDeletePressed(category, item, contactInfo), 'Delete'),
+                      ]
+                    : null,
+              );
+            }),
+          const SizedBox(height: 12),
+        ],
+      );
+    }).toList(),
+  );
+}
+

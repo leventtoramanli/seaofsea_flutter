@@ -14,34 +14,39 @@ class CustomFormField extends StatelessWidget {
   final bool isEmail;
   final bool isNumeric;
   final bool isDate;
+  final int? lastDate;
   final bool isPhone;
   final bool isUrl;
+  final bool isSelect;
+  final List<String> selectItems;
   final BuildContext? context;
   final int maxLines;
   final bool isRequired;
   final VoidCallback? onFieldSubmitted;
   final bool showField;
 
-  const CustomFormField({
-    super.key,
-    required this.controller,
-    required this.themeProvider,
-    required this.label,
-    required this.hint,
-    required this.icon,
-    this.validationMessage,
-    this.isPassword = false,
-    this.isEmail = false,
-    this.isNumeric = false,
-    this.isDate = false,
-    this.isPhone = false,
-    this.isUrl = false,
-    this.context,
-    this.maxLines = 1,
-    this.isRequired = true,
-    this.onFieldSubmitted,
-    this.showField = true,
-  });
+  const CustomFormField(
+      {super.key,
+      required this.controller,
+      required this.themeProvider,
+      required this.label,
+      required this.hint,
+      required this.icon,
+      this.validationMessage,
+      this.isPassword = false,
+      this.isEmail = false,
+      this.isNumeric = false,
+      this.isDate = false,
+      this.isPhone = false,
+      this.isUrl = false,
+      this.isSelect = false,
+      this.selectItems = const [],
+      this.context,
+      this.maxLines = 1,
+      this.isRequired = true,
+      this.onFieldSubmitted,
+      this.showField = true,
+      this.lastDate = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -50,17 +55,78 @@ class CustomFormField extends StatelessWidget {
 
     return StatefulBuilder(
       builder: (context, setState) {
+        if (isSelect && selectItems.isNotEmpty) {
+          return DropdownButtonFormField<String>(
+            value: controller.text.isNotEmpty ? controller.text : null,
+            items: selectItems.map((item) {
+              return DropdownMenuItem<String>(
+                value: item,
+                child: Text(item),
+              );
+            }).toList(),
+            onChanged: (value) {
+              controller.text = value ?? '';
+              onFieldSubmitted?.call();
+            },
+            decoration: InputDecoration(
+              labelText: label,
+              hintText: hint,
+              prefixIcon: icon,
+              filled: true,
+              fillColor: themeProvider.isDarkMode
+                  ? Colors.grey.shade800
+                  : Colors.grey.shade200,
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: themeProvider.isDarkMode
+                      ? Colors.blueGrey.shade200
+                      : Colors.blueGrey.shade400,
+                ),
+                borderRadius: BorderRadius.circular(10.0),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                  width: 2.0,
+                ),
+                borderRadius: BorderRadius.circular(10.0),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: Colors.red),
+                borderRadius: BorderRadius.circular(10.0),
+              ),
+              border: OutlineInputBorder(
+                borderSide: BorderSide(
+                  color: themeProvider.isDarkMode ? Colors.white : Colors.black,
+                ),
+                borderRadius: BorderRadius.circular(10.0),
+              ),
+            ),
+            validator: (value) {
+              if (isRequired && (value == null || value.isEmpty)) {
+                return validationMessage ?? 'Required';
+              }
+              return null;
+            },
+          );
+        }
+
         return TextFormField(
           controller: controller,
           obscureText: obsText,
           readOnly: isDate, // Tarih seçimi için klavye kapatılır
           onTap: isDate
               ? () async {
+                  final today = DateTime.now();
+                  final calculatedLastDate = lastDate == 0
+                      ? today
+                      : today.add(Duration(days: lastDate! * 365));
+
                   final selectedDate = await showDatePicker(
-                    context: this.context!,
-                    initialDate: DateTime.now(),
+                    context: this.context ?? context,
+                    initialDate: today,
                     firstDate: DateTime(1900),
-                    lastDate: DateTime.now(),
+                    lastDate: calculatedLastDate,
                   );
                   if (selectedDate != null) {
                     controller.text =
@@ -68,6 +134,7 @@ class CustomFormField extends StatelessWidget {
                   }
                 }
               : null,
+
           keyboardType: isEmail
               ? TextInputType.emailAddress
               : isPhone

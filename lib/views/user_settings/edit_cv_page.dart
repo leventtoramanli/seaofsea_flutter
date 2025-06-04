@@ -13,8 +13,13 @@ class CVPageData {
   final Map<String, dynamic> user;
   final Map<String, dynamic> cv;
   final bool isOwn;
+  final List<dynamic> allCertificates;
 
-  CVPageData({required this.user, required this.cv, required this.isOwn});
+  CVPageData(
+      {required this.user,
+      required this.cv,
+      required this.isOwn,
+      required this.allCertificates});
 }
 
 class EditCVPage extends StatefulWidget {
@@ -28,6 +33,7 @@ class _EditCVPageState extends State<EditCVPage> {
   Future<Map<String, dynamic>> loadUserData() async {
     final api = Provider.of<ApiManager>(context, listen: false);
     final response = await api.post(context, 'get_user_info', {});
+    debugPrint('User all data: $response');
     return response;
   }
 
@@ -41,7 +47,11 @@ class _EditCVPageState extends State<EditCVPage> {
     final cv = await api.post(context, 'get_user_cvs', {'user_id': userId});
     final isOwn = cv['data']?['own'] == true;
 
-    return CVPageData(user: user, cv: cv, isOwn: isOwn);
+    final certResponse = await api.post(context, 'list_certificates', {});
+    final allCertificates = certResponse['data'] ?? [];
+
+    return CVPageData(
+        user: user, cv: cv, isOwn: isOwn, allCertificates: allCertificates);
   }
 
   Widget sectionBox({
@@ -123,6 +133,7 @@ class _EditCVPageState extends State<EditCVPage> {
           final data = snapshot.data!;
           final cv = data.cv;
           final isOwn = data.isOwn;
+          final allCertificates = data.allCertificates;
 
           String basicInfo = cv['data']?['basic_info'] ?? '';
           String professionalTitle = cv['data']?['professional_title'] ?? '';
@@ -132,6 +143,8 @@ class _EditCVPageState extends State<EditCVPage> {
           final countryId = contactData['country_name'];
           final cityId = contactData['city_name'];
           final address = contactData['address'] ?? '';
+          final zipCode = contactData['zip_code'] ?? '';
+
           final phones =
               List<String>.from(jsonDecode(contactData['phone'] ?? '[]'));
           final emails =
@@ -139,11 +152,51 @@ class _EditCVPageState extends State<EditCVPage> {
           final socials =
               List<String>.from(jsonDecode(contactData['social'] ?? '[]'));
 
+          final Widget myWidgets;
+
           final List<Widget> contactWidgets = [];
 
           final referencesRaw = cv['data']?['references'];
           List<dynamic> referencesList = [];
-
+          final birthDate = userData['data']['dob'] ?? '-';
+          final placeBirth = userData['data']['pob'] ?? '-';
+          final gender = userData['data']['gender'] ?? '-';
+          final maritalStatus = userData['data']['maritalStatus'] ?? '-';
+          myWidgets = 
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Born on:'),
+                    Text(DateTimeService.formatDate(birthDate, context)),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Place of Birth:'),
+                    Text(placeBirth),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Gender:'),
+                    Text(gender),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Marital Status:'),
+                    Text(maritalStatus),
+                  ],
+                ),
+              ],
+            );
+          
           if (referencesRaw is String) {
             try {
               referencesList = jsonDecode(referencesRaw);
@@ -175,9 +228,14 @@ class _EditCVPageState extends State<EditCVPage> {
           if (cityId != null || countryId != null) {
             contactWidgets.add(
               TextWithIcons(
-                  text: '${cityId ?? ''} ${countryId ?? ''}'.trim(),
+                  text: '${cityId ?? ''} / ${countryId ?? ''}'.trim(),
                   isColored: Colors.white),
             );
+          }
+
+          if (zipCode.trim().isNotEmpty) {
+            contactWidgets.add(TextWithIcons(
+                text: 'Zip/Postal Code: $zipCode', isColored: Colors.white));
           }
 
           for (final phone in phones) {
@@ -219,6 +277,18 @@ class _EditCVPageState extends State<EditCVPage> {
             }
           } else if (languagesRaw is List) {
             languagesList = languagesRaw;
+          }
+          final stcwRaw = cv['data']?['certificates'];
+          List<dynamic> stcwCertificates = [];
+
+          if (stcwRaw is String && stcwRaw.isNotEmpty) {
+            try {
+              stcwCertificates = jsonDecode(stcwRaw);
+            } catch (_) {
+              stcwCertificates = [];
+            }
+          } else if (stcwRaw is List) {
+            stcwCertificates = stcwRaw;
           }
 
           final educationRaw = cv['data']?['education'];
@@ -275,6 +345,7 @@ class _EditCVPageState extends State<EditCVPage> {
                     ),
                   );
                 }).toList();
+          debugPrint("CV Veri: ${cv['data']}");
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24),
@@ -472,6 +543,8 @@ class _EditCVPageState extends State<EditCVPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  myWidgets,
+                                  const SizedBox(height: 20),
                                   //contact
                                   _buildSimpleSection(
                                     'Contact',
@@ -536,8 +609,9 @@ class _EditCVPageState extends State<EditCVPage> {
                                           type: 'skills',
                                           initialCV: cv['data'],
                                           onSubmit: (value) {
-                                            if (value == 'success')
+                                            if (value == 'success') {
                                               setState(() {});
+                                            }
                                           },
                                         ),
                                       );
@@ -578,8 +652,9 @@ class _EditCVPageState extends State<EditCVPage> {
                                           type: 'language',
                                           initialCV: cv['data'],
                                           onSubmit: (value) {
-                                            if (value == 'success')
+                                            if (value == 'success') {
                                               setState(() {});
+                                            }
                                           },
                                         ),
                                       );
@@ -674,6 +749,32 @@ class _EditCVPageState extends State<EditCVPage> {
                                       );
                                     },
                                   ),
+                                  const SizedBox(height: 24),
+                                  if (isOwn)
+                                    _buildSimpleSection(
+                                      'Passport, Health, Certificates',
+                                      _buildStcwCertificatesSection(
+                                          stcwCertificates, allCertificates),
+                                      false,
+                                      isOwn: isOwn,
+                                      widget: true,
+                                      onEdit: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) => CVPopupEditor(
+                                            title: 'Edit STCW Certificates',
+                                            type: 'stcw_certificates',
+                                            allCertificates: allCertificates,
+                                            initialCV: cv['data'],
+                                            onSubmit: (value) {
+                                              if (value == 'success') {
+                                                setState(() {});
+                                              }
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    ),
                                 ],
                               ),
                             ),
@@ -692,6 +793,160 @@ class _EditCVPageState extends State<EditCVPage> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildStcwCertificatesSection(
+      List<dynamic> certs, List<dynamic> allCertificates) {
+    if (certs.isEmpty) {
+      return const Text(
+        'No STCW certificates added yet.',
+        style: TextStyle(color: Colors.black),
+      );
+    }
+
+    // 📌 Sertifikaları gruplama
+    final Map<int, List<Map<String, dynamic>>> grouped = {};
+    for (var cert in certs) {
+      final groupId = int.tryParse(allCertificates
+              .firstWhere((c) => c['id'] == cert['id'])['group_id']
+              .toString()) ??
+          0;
+      grouped.putIfAbsent(groupId, () => []).add(cert as Map<String, dynamic>);
+    }
+
+    // 📌 Grup isimleri
+    final Map<int, String> groupNames = {
+      1: 'Travel Documents',
+      2: 'Medical Certificates',
+      3: 'Basic Safety Trainings',
+      4: 'Advanced and Specialized Trainings',
+      5: 'Officer Certificates',
+      6: 'Deck & Engine Ratings',
+      7: 'Onboard Services',
+      8: 'Medical Crew',
+      9: 'Fishing Vessel Certificates',
+      10: 'Offshore Safety',
+      11: 'Tug Operations & Pilotage',
+      12: 'Pilotage Licenses',
+      13: 'Luxury Yacht Services',
+    };
+
+    final sortedGroupIds = grouped.keys.toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: sortedGroupIds.map((groupId) {
+        final groupCerts = grouped[groupId]!;
+
+        // 📌 Her gruptaki sertifikaları sıralama
+        groupCerts.sort((a, b) {
+          final orderA = int.tryParse(allCertificates
+                  .firstWhere((c) => c['id'] == a['id'])['sort_order']
+                  .toString()) ??
+              0;
+          final orderB = int.tryParse(allCertificates
+                  .firstWhere((c) => c['id'] == b['id'])['sort_order']
+                  .toString()) ??
+              0;
+          return orderA.compareTo(orderB);
+        });
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                groupNames[groupId] ?? 'Group $groupId',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: Colors.blueGrey,
+                ),
+              ),
+            ),
+            ...groupCerts.map((cert) {
+              final certInfo =
+                  allCertificates.firstWhere((c) => c['id'] == cert['id']);
+              final name =
+                  '${certInfo['name'] ?? ''} (${certInfo['stcw_code'] ?? ''})';
+              final issue = cert['isd'] ?? '-';
+              final expire = cert['exd'] ?? '-';
+
+              // 🟦 Özelleşmiş alanlar (Pasaport, Seaman’s Book, Drivers License gibi)
+              final docNumber = cert['dn']; // doc number kısaca
+
+              // 🟦 Vize bilgileri (Seaman Visa için)
+              final visas = cert['visas'] as List<dynamic>?;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 🟦 Sertifika adı
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87,
+                      ),
+                    ),
+
+                    // 🟦 Document number varsa göster
+                    if (docNumber != null && docNumber.toString().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8.0),
+                        child: Text(
+                          'Number/Type: $docNumber',
+                          style: const TextStyle(color: Colors.black54),
+                        ),
+                      ),
+
+                    // 🟦 Issue & Expiry tarihleri (Seaman Visa harici)
+                    if (name != 'Seaman Visa')
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8.0, top: 2.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Issue: $issue Expire: $expire',
+                                style: const TextStyle(color: Colors.black54)),
+                          ],
+                        ),
+                      ),
+
+                    // 🟦 Seaman Visa ise alt vize listesi
+                    if (name == 'Seaman Visa' && visas != null)
+                      Column(
+                        children: visas.map((visa) {
+                          final visaName = visa['vn'] ?? '-';
+                          final visaIssue = visa['isd'] ?? '-';
+                          final visaExpire = visa['exd'] ?? '-';
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Visa: $visaName',
+                                    style:
+                                        const TextStyle(color: Colors.black)),
+                                Text('Issue: $visaIssue Expire: $visaExpire',
+                                    style:
+                                        const TextStyle(color: Colors.black54)),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        );
+      }).toList(),
     );
   }
 
@@ -745,6 +1000,7 @@ class _EditCVPageState extends State<EditCVPage> {
         final position =
             exp['position_name'] ?? exp['position'] ?? exp['title'] ?? '';
         final period = exp['period'] ?? '';
+        final period1 = exp['period1'] ?? '';
         final company = exp['company'] ?? '';
         final shipName = exp['shipName'] ?? '';
         final flag = exp['flag'] ?? '';
@@ -755,7 +1011,7 @@ class _EditCVPageState extends State<EditCVPage> {
 
         // Ortak Başlık
         final header = Text(
-          '$position (${period.isNotEmpty ? period : 'N/A'})',
+          '$position (${period.isNotEmpty ? period : 'N/A'} - ${period1.isNotEmpty ? period1 : 'N/A'})',
           style:
               const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
         );
@@ -845,6 +1101,7 @@ class _EditCVPageState extends State<EditCVPage> {
       ],
     );
   }
+
   Widget _buildSimpleSection(
     String title,
     dynamic content,

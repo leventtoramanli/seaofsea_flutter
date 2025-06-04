@@ -18,6 +18,10 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _surnameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _dobController = TextEditingController();
+  final TextEditingController _pobController = TextEditingController();
+  final TextEditingController _genderController = TextEditingController();
+  final TextEditingController _msController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
 
   Map<String, dynamic> infoData = {};
@@ -39,6 +43,10 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
           _nameController.text = infoData['name'] ?? '';
           _surnameController.text = infoData['surname'] ?? '';
           _emailController.text = infoData['email'] ?? '';
+          _msController.text = infoData['maritalStatus'] ?? '';
+          _genderController.text = infoData['gender'] ?? '';
+          _dobController.text = infoData['dob'] ?? '';
+          _pobController.text = infoData['pob'] ?? '';
           _bioController.text = infoData['bio'] ?? '';
         });
       }
@@ -53,8 +61,13 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
       'name': _nameController.text,
       'surname': _surnameController.text,
       'email': _emailController.text,
+      'dob': _dobController.text,
+      'pob': _pobController.text,
+      'gender': _genderController.text,
+      'maritalStatus': _msController.text,
       'bio': _bioController.text,
     });
+    debugPrint('User all data: $response');
     setState(() => isUpdating = false);
     if (response['success'] == true) {
       await fetchUserData();
@@ -203,6 +216,47 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
                         icon: const Icon(Icons.email),
                         validationMessage: "E-Mail is required",
                         isEmail: true,
+                      ),
+                      const SizedBox(height: 10),
+                      CustomFormField(
+                        controller: _dobController,
+                        themeProvider: themeProvider,
+                        label: "Date of Birth",
+                        hint: "Enter your date of birth",
+                        icon: const Icon(Icons.cake),
+                        isRequired: false,
+                        isDate: true,
+                      ),
+                      const SizedBox(height: 10),
+                      CustomFormField(
+                        controller: _pobController,
+                        themeProvider: themeProvider,
+                        label: "Place of Birth",
+                        hint: "Enter your place of birth",
+                        icon: const Icon(Icons.location_on),
+                        isRequired: false,
+                      ),
+                      const SizedBox(height: 10),
+                      CustomFormField(
+                        controller: _genderController,
+                        themeProvider: themeProvider,
+                        label: "Gender",
+                        hint: "Select your gender",
+                        icon: const Icon(Icons.person_2_outlined),
+                        isRequired: false,
+                        isSelect: true,
+                        selectItems: ['Male', 'Female', 'Other'],
+                      ),
+                      const SizedBox(height: 10),
+                      CustomFormField(
+                        controller: _msController,
+                        themeProvider: themeProvider,
+                        label: "Marital Status",
+                        hint: "Select your marital status",
+                        icon: const Icon(Icons.toll_rounded),
+                        isRequired: false,
+                        isSelect: true,
+                        selectItems: ['Single', 'Married', 'Engaged'],
                       ),
                       const SizedBox(height: 20),
                       CustomFormField(

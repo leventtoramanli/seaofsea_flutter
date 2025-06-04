@@ -8,6 +8,7 @@ import 'package:seaofsea/views/user_settings/contact_form_section_cv.dart';
 import 'package:seaofsea/views/user_settings/cv_education_setting.dart';
 import 'package:seaofsea/views/user_settings/cv_language_settings.dart';
 import 'package:seaofsea/views/user_settings/cv_referance_setting.dart';
+import 'package:seaofsea/views/user_settings/cv_stcw_settings.dart';
 import 'package:seaofsea/views/user_settings/cv_work_experience_settings.dart';
 import 'package:seaofsea/views/user_settings/expertice_form_section_cv.dart';
 
@@ -18,6 +19,7 @@ class CVPopupEditor extends StatefulWidget {
   final Map<String, dynamic>? initialCV;
   final String? type;
   final Function(String) onSubmit;
+  final List<dynamic>? allCertificates;
 
   const CVPopupEditor({
     super.key,
@@ -27,6 +29,7 @@ class CVPopupEditor extends StatefulWidget {
     this.saveButton = true,
     this.initialText,
     this.type = 'default',
+    this.allCertificates,
   });
 
   @override
@@ -38,6 +41,7 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
   final GlobalKey<FormState> _educationFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _workFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _referenceFormKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _stcwFormKey = GlobalKey<FormState>();
 
   String content = '';
   Map<String, dynamic> contactData = {};
@@ -92,6 +96,13 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
       pendingData = {
         'education': result,
       };
+    }
+    if (widget.type == 'stcw_certificates') {
+      final state = _stcwFormKey.currentState?.context
+          .findAncestorStateOfType<CVSTCWSettingsState>();
+      final result = state?.getData();
+      if (result == null) return;
+      pendingData = {'certificates': result};
     }
 
     if (widget.type == 'work_experience') {
@@ -265,7 +276,7 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
           ),
         );
       case 'work_experience':
-      final raw = widget.initialCV?[type];
+        final raw = widget.initialCV?[type];
         List<Map<String, dynamic>> workList = [];
 
         if (raw is String) {
@@ -286,7 +297,7 @@ class _CVPopupEditorState extends State<CVPopupEditor> {
             ),
           ),
         );
-case 'references':
+      case 'references':
         final raw = widget.initialCV?[type];
         List<Map<String, dynamic>> referencesList = [];
 
@@ -307,6 +318,32 @@ case 'references':
             ),
           ),
         );
+      case 'stcw_certificates':
+        final raw = widget.initialCV?['certificates'];
+        final allCertificates = widget.allCertificates ?? [];
+        List<Map<String, dynamic>> userCerts = [];
+
+        if (raw is String) {
+          try {
+            userCerts = List<Map<String, dynamic>>.from(jsonDecode(raw));
+          } catch (_) {}
+        } else if (raw is List) {
+          userCerts = List<Map<String, dynamic>>.from(raw);
+        }
+
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: CVSTCWSettings(
+              formKey: _stcwFormKey,
+              allCertificates: allCertificates
+                  .map((e) => e as Map<String, dynamic>)
+                  .toList(),
+              initialUserCertificates: userCerts,
+            ),
+          ),
+        );
+
       case 'default':
         return QuillTextEditor(
           showAll: false,
@@ -338,11 +375,15 @@ case 'references':
   @override
   Widget build(BuildContext context) {
     final type = widget.type ?? 'default';
+    double dialogWidth = MediaQuery.of(context).size.width > 600
+        ? MediaQuery.of(context).size.width * 0.85
+        : MediaQuery.of(context).size.width * 0.95;
+    double dialogHeight = MediaQuery.of(context).size.height * 0.85;
     return AlertDialog(
       title: Text(widget.title),
       content: SizedBox(
-        width: 500,
-        height: 400,
+        width: dialogWidth,
+        height: dialogHeight,
         child: _buildDialogContent(type),
       ),
       actions: [

@@ -23,7 +23,7 @@ class CustomScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final menuProvider = Provider.of<MenuItemsProvider>(context);
     final bool wideScreen = MediaQuery.of(context).size.width > 650;
-    final bool tWideScreen = MediaQuery.of(context).size.width > 850;
+    final bool tWideScreen = MediaQuery.of(context).size.width > 950;
 
     return Scaffold(
       appBar: AppBar(
