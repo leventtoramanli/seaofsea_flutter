@@ -84,7 +84,6 @@ class MmsApp extends StatelessWidget {
                 color: Colors.black.withAlpha(10),
                 child: GestureDetector(
                   onTap: () {
-                    // Kullanıcı bulanıklığı kapatabilir
                     colorBlindnessProvider.toggleEffect();
                   },
                   behavior: HitTestBehavior.translucent,
@@ -106,14 +105,33 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
+  bool _isLoading = true;
   @override
   void initState() {
     super.initState();
+    _attemptAutoLogin();
+  }
+
+  Future<void> _attemptAutoLogin() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    // ignore: unused_local_variable
+    final success = await authProvider.tryAutoLogin(context);
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return authProvider.isLoggedIn
         ? const HomePage()

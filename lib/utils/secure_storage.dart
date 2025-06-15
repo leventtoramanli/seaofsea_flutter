@@ -42,4 +42,26 @@ class SecureStorage {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(key);
   }
+
+  static const String tokenKey = 'auth_token';
+  static const String userKey = 'user_info';
+
+  Future<void> saveAuthData(String token, Map<String, dynamic> user) async {
+    await writeSecureData(tokenKey, token);
+    await writeSecureData(
+        userKey, user.toString()); // istersen jsonEncode(user) yap
+  }
+
+  Future<String?> getToken() async {
+    return await readSecureData(tokenKey);
+  }
+
+  Future<String?> getUserInfoRaw() async {
+    return await readSecureData(userKey);
+  }
+
+  Future<void> clearAll() async {
+    await deleteSecureData(tokenKey);
+    await deleteSecureData(userKey);
+  }
 }

@@ -1,10 +1,9 @@
 // ignore_for_file: use_build_context_synchronously
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/services/v1/user_service.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/quotes.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
@@ -29,7 +28,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailController =
       TextEditingController(text: 'leventtoramanli@gmail.com');
   final TextEditingController passwordController =
-      TextEditingController(text: '145326326Ll');
+      TextEditingController(text: '145326326lL');
 
   bool isLoading = false;
   final SecureStorage secureStorage = SecureStorage();
@@ -74,58 +73,54 @@ class _LoginPageState extends State<LoginPage> {
         isLoading = true;
       });
 
-      final apiManager = Provider.of<ApiManager>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
       try {
-        final deviceUUID = await authProvider.saveDeviceUUID();
+        await secureStorage.writeSecureData(
+            'rememberMe', rememberMe.toString());
 
-        final response = await apiManager
-          .request(context, endpoint: 'login', method: 'POST', body: {
-          'email': emailController.text,
-          'password': passwordController.text,
-          'device_uuid': deviceUUID,
-          'remember_me': rememberMe
-        });
+        final success = await authProvider.v1login(
+          context,
+          emailController.text.trim(),
+          passwordController.text,
+          rememberMe: rememberMe,
+        );
 
-        if (kDebugMode) {
-          print('Response after API Manager: $response');
+        if (!success) {
+          return;
         }
 
-        if (response['success']) {
-          final token = response['data']['token'];
-          final refreshToken = response['data']['refresh_token'] ?? 'null';
-          final role = response['data']['role'];
-          final isVerified = response['data']['is_verified'];
-          // ignore: unused_local_variable
-          final userId = response['data']['id']?.toString();
+        final userService = UserService();
+        final result = await userService.getProfile();
 
-          // Token doğruluğunu kontrol et
-          if (token.isEmpty || !token.contains('.')) {
-            throw Exception('Invalid token format.');
-          }
-          try {
-            await secureStorage.writeSecureData('authToken', token);
-            await secureStorage.writeSecureData('refreshToken', refreshToken);
-            await secureStorage.writeSecureData('role', role);
-          } catch (e) {
-            throw Exception('Error saving token: $e');
-          }
+        if (result['success'] == true) {
+          final user = result['user'];
+          final isVerified = user['is_verified'] ?? 1;
 
-          authProvider.login(context, token, role);
+          if (!mounted) return;
 
           if (isVerified != 1) {
             _showEmailVerificationDialog();
           } else {
+            debugPrint('✅ Login successful via v1Login.');
             Navigator.pushReplacementNamed(context, '/');
+          }
+        } else {
+          debugPrint('⚠️ Profile fetch failed: ${result['message']}');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("An error occurred")),
+            );
           }
         }
       } catch (e) {
-        debugPrint('Is it aLogin error: $e');
+        debugPrint('❗ Login error: $e');
       } finally {
-        setState(() {
-          isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
       }
     }
   }
@@ -193,7 +188,6 @@ class _LoginPageState extends State<LoginPage> {
 
   Center page(ThemeProvider themeProvider, List<Map<String, dynamic>> fields,
       BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     return Center(
       child: SingleChildScrollView(
         child: Container(
@@ -250,14 +244,12 @@ class _LoginPageState extends State<LoginPage> {
                         child: Row(
                           children: [
                             Checkbox(
+                              value: rememberMe,
                               onChanged: (value) {
-                                setState(
-                                  () {
-                                    rememberMe = value ?? false;
-                                  },
-                                );
+                                setState(() {
+                                  rememberMe = value ?? false;
+                                });
                               },
-                              value: true,
                             ),
                             Flexible(
                               child: GestureDetector(
@@ -337,38 +329,18 @@ class _LoginPageState extends State<LoginPage> {
                       CustomButton(
                         label: 'Sign In Anonymously',
                         onPressed: () async {
-                          final apiManager =
-                              Provider.of<ApiManager>(context, listen: false);
-
-                          try {
-                            final response = await apiManager
-                                .post(context, '/anonymous-login', {});
-                            if (response['success']) {
-                              final token = response['data']['token'];
-                              await secureStorage.writeSecureData(
-                                  'token', token);
-                              authProvider.login(context, token!, 'anonymous');
-                              Navigator.pushReplacementNamed(context, '/home');
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(response['message'] ??
-                                      'Anonymous login failed'),
-                                ),
-                              );
-                            }
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                    'An error occurred. Please try again.'),
-                              ),
-                            );
+                          final authProvider =
+                              Provider.of<AuthProvider>(context, listen: false);
+                          final success =
+                              await authProvider.v1anonymousLogin(context);
+                          if (success && context.mounted) {
+                            Navigator.pushReplacementNamed(context, '/home');
                           }
                         },
                         icon: Icons.theater_comedy,
                         backgroundColor: Colors.amber.shade400,
                         textColor: Colors.black,
+                        isLoading: isLoading,
                       ),
                       const SizedBox(height: 12.0),
                       CustomButton(

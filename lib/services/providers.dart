@@ -1,5 +1,6 @@
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/color_blindness_provider.dart';
@@ -19,5 +20,8 @@ List<SingleChildWidget> providers = [
   ProxyProvider<AuthProvider, ApiManager>(
     update: (context, authProvider, apiManager) =>
         ApiManager(authProvider.token),
+  ),
+  Provider<V1ApiManager>(
+    create: (_) => V1ApiManager(),
   ),
 ];

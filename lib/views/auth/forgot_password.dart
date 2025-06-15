@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/quotes.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
 import 'package:seaofsea/utils/theme_data.dart';
@@ -46,7 +46,6 @@ class _ForgotPasswordState extends State<ForgotPassword> {
           content: const Text(
               'Check your email address. A password reset email has been sent to your email address.'),
           actions: [
-            TextButton(onPressed: () {}, child: const Text('Send Again')),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
@@ -72,13 +71,18 @@ class _ForgotPasswordState extends State<ForgotPassword> {
       });
 
       try {
-        final apiManager = Provider.of<ApiManager>(context, listen: false);
-        final response = await apiManager.request(context,
-            endpoint: 'reset_password_request',
-            method: 'POST',
-            body: {
-              'email': emailController.text,
-            });
+        final v1 = Provider.of<V1ApiManager>(context, listen: false);
+
+        final response = await v1.call(
+          module: 'auth',
+          action: 'resetPasswordRequest',
+          requiresAuth: false,
+          params: {
+            'email': emailController.text.trim(),
+          },
+        );
+
+        debugPrint('Server response: $response');
 
         if (response['success']) {
           _showEmailResetDialog();
@@ -203,9 +207,11 @@ class _ForgotPasswordState extends State<ForgotPassword> {
                     children: [
                       CustomButton(
                         label: 'Send Reset Password Email',
-                        onPressed: () {isLoading ? null :
-                          _handlePasswordReset();
-                        },
+                        onPressed: isLoading
+                            ? () {}
+                            : () {
+                                _handlePasswordReset();
+                              },
                         icon: Icons.email,
                         isLoading: isLoading,
                         backgroundColor: Colors.blueGrey,
@@ -214,14 +220,16 @@ class _ForgotPasswordState extends State<ForgotPassword> {
                       const SizedBox(height: 12.0),
                       CustomButton(
                         label: 'Turn Back',
-                        onPressed: () { isLoading ? null :
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const AuthPage(mode: AuthMode.login),
-                            ),
-                          );
+                        onPressed: () {
+                          isLoading
+                              ? null
+                              : Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const AuthPage(mode: AuthMode.login),
+                                  ),
+                                );
                         },
                         icon: Icons.arrow_back,
                         backgroundColor: Colors.green.shade400,

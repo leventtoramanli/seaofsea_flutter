@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/quotes.dart';
 import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
@@ -65,12 +65,6 @@ class _RegisterPageState extends State<RegisterPage> {
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() {
-      isLoading = true;
-    });
-
-    final apiManager = Provider.of<ApiManager>(context, listen: false);
-
     if (!_termsAccepted) {
       showDialog(
         context: context,
@@ -94,16 +88,22 @@ class _RegisterPageState extends State<RegisterPage> {
       return;
     }
 
-    try {
-      final response = await apiManager
-          .request(context, endpoint: 'register', method: 'POST', body: {
-        'name': nameController.text,
-        'surname': surnameController.text,
-        'email': emailController.text,
-        'password': passwordController.text
-      });
+    setState(() {
+      isLoading = true;
+    });
 
-      if (response['success']) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    try {
+      final success = await authProvider.v1Register(
+        context: context,
+        name: nameController.text.trim(),
+        surname: surnameController.text.trim(),
+        email: emailController.text.trim(),
+        password: passwordController.text,
+      );
+
+      if (success && mounted) {
         _showEmailVerificationDialog();
       }
     } catch (e) {

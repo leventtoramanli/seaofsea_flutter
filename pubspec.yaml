@@ -58,6 +58,8 @@ dependencies:
   flutter_quill_extensions: ^11.0.0
   country_flags: ^3.2.0
   font_awesome_flutter: ^10.8.0
+  package_info_plus: ^8.3.0
+  device_info_plus: ^11.4.0
 
 dev_dependencies:
   flutter_test:

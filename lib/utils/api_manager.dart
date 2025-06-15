@@ -23,6 +23,7 @@ class ApiManager {
   });
 
   factory ApiManager.empty() => ApiManager(null);
+  
 
   String showImage(String imagePath, bool asset) {
     if (asset) {
@@ -88,6 +89,7 @@ class ApiManager {
           debugPrint("🔄 Refresh Token Action: $refreshSuccessful");
 
           if (refreshSuccessful) {
+            _retryCount = 0;
             authToken = await secureStorage.readSecureData('authToken');
             debugPrint("✅ New token is using: $authToken");
             headers['Authorization'] = 'Bearer $authToken';
@@ -101,7 +103,7 @@ class ApiManager {
             if (context.mounted) {
               final authProvider =
                   Provider.of<AuthProvider>(context, listen: false);
-              await authProvider.logout(context);
+              await authProvider.v1logout();
             }
             throw Exception('Session expired. Please log in again.');
           }
@@ -127,7 +129,7 @@ class ApiManager {
               if (context.mounted) {
                 final authProvider =
                     Provider.of<AuthProvider>(context, listen: false);
-                await authProvider.logout(context);
+                await authProvider.v1logout();
               }
               throw Exception('Session expired. Please log in again.');
             }
@@ -241,7 +243,7 @@ class ApiManager {
             );
           } else {
             if (context.mounted) {
-              await authProvider.logout(context);
+              await authProvider.v1logout();
             }
             throw Exception('Session expired. Please log in again.');
           }

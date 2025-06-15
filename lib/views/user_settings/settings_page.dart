@@ -140,7 +140,7 @@ class LogoutScreen extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               final authProvider = Provider.of<AuthProvider>(context, listen: false);
-              await authProvider.logout(context);
+              await authProvider.v1logout();
               if (context.mounted) {
                 Navigator.pushReplacementNamed(context, '/');
               }
@@ -153,7 +153,7 @@ class LogoutScreen extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               final authProvider = Provider.of<AuthProvider>(context, listen: false);
-              await authProvider.logout(context);
+              await authProvider.v1logout(allDevices: true);
               if (context.mounted) {
                 Navigator.pushReplacementNamed(context, '/');
               }

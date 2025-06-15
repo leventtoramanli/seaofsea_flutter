@@ -1,0 +1,116 @@
+{
+  "framework": "Flutter",
+  "architecture": "v1 Modular API-Oriented Architecture",
+  "entry_point": "main.dart",
+  "routing": {
+    "library": "Navigator / GoRouter (kendi uygulamasına göre)",
+    "auth_check": "authProvider.isLoggedIn ? HomePage : AuthPage"
+  },
+  "providers": {
+    "file": "providers.dart",
+    "list": [
+      "AuthProvider",
+      "ThemeProvider",
+      "RoleProvider",
+      "MenuItemsProvider",
+      "DynamicFieldProvider",
+      "ColorBlindnessProvider",
+      "LoadingProvider",
+      "ProxyProvider (AuthProvider → ApiManager)"
+    ]
+  },
+  "state_management": "Provider (ChangeNotifier)",
+  "secure_storage": {
+    "file": "secure_storage.dart",
+    "encryption": "AES-128 with IV",
+    "usage": [
+      "authToken",
+      "refreshToken",
+      "role",
+      "userId"
+    ]
+  },
+  "v1_layer": {
+    "folder": "lib/services/v1/",
+    "files": {
+      "v1_api_manager.dart": {
+        "role": "Tüm backend çağrıları bu sınıf üzerinden yapılır.",
+        "structure": "call({module, action, params, requiresAuth})",
+        "auth": "JWT token otomatik eklenir (Authorization: Bearer ...)"
+      },
+      "auth_service.dart": {
+        "role": "login, logout, refresh işlemlerinin merkezi yönetimi",
+        "methods": [
+          "login(email, password): token + user verisi alır ve kaydeder"
+        ]
+      },
+      "user_service.dart": {
+        "role": "Giriş yapan kullanıcının profil bilgilerini getirir",
+        "methods": [
+          "getProfile(): JWT token ile kullanıcı verisini alır"
+        ]
+      },
+      "v1_config.dart": {
+        "role": "Merkezi ayarlar (baseUrl, header yapısı, timeout)",
+        "constants": [
+          "baseUrl",
+          "defaultHeaders",
+          "authHeaderKey",
+          "bearerPrefix"
+        ]
+      }
+    }
+  },
+  "auth_provider": {
+    "file": "auth_provider.dart",
+    "methods": [
+      "v1Login(context, email, password): AuthService.login() üzerinden çağrılır",
+      "login(context, token, role): Mevcut sistemle uyumlu kalması için saklanır"
+    ],
+    "login_flow": [
+      "Form validate → v1Login → SecureStorage kayıt → notifyListeners()"
+    ]
+  },
+  "login_form": {
+    "file": "login_page.dart",
+    "method": "_handleLogin()",
+    "flow": [
+      "Form validate",
+      "authProvider.v1Login(...) çağrılır",
+      "Eğer başarılıysa → userService.getProfile()",
+      "Doğrulama kontrolü yapılır (is_verified)",
+      "Yönlendirme yapılır"
+    ]
+  },
+  "expected_backend_format": {
+    "request": {
+      "module": "auth",
+      "action": "login",
+      "params": {
+        "email": "test@example.com",
+        "password": "123456"
+      }
+    },
+    "response": {
+      "success": true,
+      "data": {
+        "token": "jwt_token",
+        "refresh_token": "optional",
+        "role": "admin",
+        "user": {
+          "id": 1,
+          "name": "John",
+          "email": "john@example.com",
+          "is_verified": 1
+        }
+      }
+    }
+  },
+  "future_todos": [
+    "register fonksiyonu için v1 mimarisinde ayrı servis",
+    "logout işlemi için SecureStorage temizliği + notify",
+    "refresh_token sisteminin kurulması (isteğe bağlı)",
+    "v1_user_service'e updateProfile(), uploadAvatar() gibi fonksiyonlar eklenmesi",
+    "exception/log kaydı için global debug interceptor yapısı"
+  ]
+}

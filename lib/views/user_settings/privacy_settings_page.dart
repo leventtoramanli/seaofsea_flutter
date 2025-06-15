@@ -134,7 +134,7 @@ class _PrivacySettingsState extends State<PrivacySettings> {
                             final authProvider = Provider.of<AuthProvider>(
                                 context,
                                 listen: false);
-                            await authProvider.logout(context);
+                            await authProvider.v1logout();
                             if (context.mounted) {
                               Navigator.pushReplacementNamed(context, '/');
                             }

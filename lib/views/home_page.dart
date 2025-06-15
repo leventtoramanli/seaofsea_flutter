@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
 
@@ -13,20 +14,72 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int _layoutMode = 0; // 0 = Grid, 1 = Text List, 2 = Button List
+  bool _dialogShown = false;
 
   final ScrollController _infoScrollController = ScrollController();
 
   @override
-void initState() {
-  super.initState();
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    Future.delayed(const Duration(milliseconds: 800), _animateInfoScroll);
-  });
-}
+  void initState() {
+    super.initState();
 
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userInfo = authProvider.userInfo;
+
+    if (userInfo != null) {
+      final isVerified = userInfo['is_verified'];
+      debugPrint('userInfo: $userInfo');
+      debugPrint('isVerified: $isVerified');
+
+      if (isVerified != 1 &&
+          isVerified != '1' &&
+          isVerified != true &&
+          !_dialogShown) {
+        if (!_dialogShown) {
+          _dialogShown = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (!mounted) return;
+
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Registration Successful'),
+                  content: const Text(
+                    'Please verify your email address. A verification email has been sent to your email address.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        // Yeniden gönderme işlemi
+                      },
+                      child: const Text('Send Again'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                      child: const Text('OK'),
+                    ),
+                  ],
+                ),
+              );
+            });
+          });
+        }
+      }
+    } else {
+      debugPrint('⚠️ userInfo is null at HomePage initState');
+    }
+
+    // Scroll animation
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 800), _animateInfoScroll);
+    });
+  }
 
   void _animateInfoScroll() {
-    if (_infoScrollController.hasClients && _infoScrollController.position.maxScrollExtent > 0) {
+    if (_infoScrollController.hasClients &&
+        _infoScrollController.position.maxScrollExtent > 0) {
       _infoScrollController.animateTo(
         _infoScrollController.position.maxScrollExtent,
         duration: const Duration(seconds: 2),
@@ -58,12 +111,10 @@ void initState() {
     final Color footerBorder =
         isDark ? Colors.white.withAlpha(30) : Colors.black.withAlpha(30);
 
-    final Color glassBackground = isDark
-        ? Colors.grey.withAlpha(15)
-        : Colors.grey.withAlpha(40);
-    final Color glassBorder = isDark
-        ? Colors.white.withAlpha(20)
-        : Colors.white.withAlpha(30);
+    final Color glassBackground =
+        isDark ? Colors.grey.withAlpha(15) : Colors.grey.withAlpha(40);
+    final Color glassBorder =
+        isDark ? Colors.white.withAlpha(20) : Colors.white.withAlpha(30);
 
     return CustomScaffold(
       title: 'Dashboard',
@@ -78,8 +129,7 @@ void initState() {
                     return ListView(
                       children: _modules
                           .map((module) => ListTile(
-                                leading:
-                                    Icon(module.icon, color: textColor),
+                                leading: Icon(module.icon, color: textColor),
                                 title: Text(module.title,
                                     style: TextStyle(color: textColor)),
                               ))
@@ -124,7 +174,7 @@ void initState() {
             ),
           ),
           Container(
-            // değişiklik yapılacak alan bunun dışlında bir yere dokunmayalım 
+            // değişiklik yapılacak alan bunun dışlında bir yere dokunmayalım
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               border: Border(
@@ -206,6 +256,13 @@ void initState() {
                         icon: Icons.mediation,
                         label: 'Social',
                         onTap: () {},
+                      ),
+                      _buildFooterButton(
+                        icon: Icons.work_outline,
+                        label: 'Apply Job',
+                        onTap: () {
+                          Navigator.pushNamed(context, '/job_application');
+                        },
                       ),
                     ],
                   ),
