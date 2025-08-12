@@ -1,10 +1,9 @@
-// ignore_for_file: library_private_types_in_public_api, prefer_final_fields
+// ignore_for_file: library_private_types_in_public_api, prefer_final_fields, use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
-// ignore: unused_import
-import 'package:seaofsea/utils/auth_provider.dart';
-import 'package:seaofsea/views/companies/company_admin_page.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
+//import 'package:seaofsea/views/companies/company_admin_page.dart';
 import 'package:seaofsea/views/user_settings/edit_cv_page.dart';
 import 'package:seaofsea/views/user_settings/profile_general_tab.dart';
 
@@ -27,11 +26,14 @@ class _ProfilePageState extends State<ProfilePage> {
   bool multipleCompanies = false;
 
   Future<void> fetchUserData() async {
-    final apiManager = Provider.of<ApiManager>(context, listen: false);
+    final apiManager = Provider.of<V1ApiManager>(context, listen: false);
     try {
-      final response = await apiManager.get(context, 'get_user_info');
+      final response = await apiManager.call(
+        module: 'profile',
+        action: 'getProfile',
+      );
 
-      if (response != null && response['success'] == true) {
+      if (response['success'] == true) {
         if (mounted) {
           setState(() {
             infoData = response['data'] ?? {};
@@ -42,8 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
           });
         }
       } else {
-        debugPrint(
-            '❌ API Hatası: ${response?['message'] ?? 'Bilinmeyen hata'}');
+        debugPrint('❌ API Hatası: ${response['message'] ?? 'Bilinmeyen hata'}');
       }
     } catch (e, stacktrace) {
       debugPrint('❌ API Hatası: $e');
@@ -51,11 +52,14 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> checkUserCompanies() async {
-    final api = Provider.of<ApiManager>(context, listen: false);
-    final response = await api.post(context, 'get_user_companies', {});
+  /*Future<void> checkUserCompanies() async {
+    final apiManager = Provider.of<V1ApiManager>(context, listen: false);
+    final response = await apiManager.call(
+      module: 'company',
+      action: 'get_user_companies',
+    );
 
-    if (response != null && response['success'] == true) {
+    if (response['success'] == true) {
       final companies = response['data'] as List<dynamic>? ?? [];
       final adminEditorCompanies = companies
           .where((company) =>
@@ -69,28 +73,30 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
     }
-  }
+  }*/
 
   Future<void> updateUserData() async {
     setState(() => isUpdating = true);
-    final apiManager = Provider.of<ApiManager>(context, listen: false);
-    final response = await apiManager.post(context, 'update_user', {
-      'user_id': infoData['id'],
-      'name': _nameController.text,
-      'surname': _surnameController.text,
-      'email': _emailController.text,
-      'bio': _bioController.text,
-    });
+    final apiManager = Provider.of<V1ApiManager>(context, listen: false);
+    final response = await apiManager.call(
+      module: 'user',
+      action: 'update_user',
+      params: {
+        'user_id': infoData['id'],
+        'name': _nameController.text,
+        'surname': _surnameController.text,
+        'email': _emailController.text,
+        'bio': _bioController.text,
+      },
+    );
     setState(() => isUpdating = false);
-    if (response != null && response['success'] == true) {
+    if (response['success'] == true) {
       await fetchUserData();
-      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Profile updated successfully!")),
       );
     } else {
-      debugPrint(
-          "❌ Güncelleme başarısız: ${response?['message'] ?? 'Unknown Error'}");
+      debugPrint("❌ Güncelleme başarısız: ${response['message'] ?? 'Unknown Error'}");
     }
   }
 
@@ -98,7 +104,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     fetchUserData();
-    checkUserCompanies();
+    //checkUserCompanies();
   }
 
   @override
@@ -117,7 +123,7 @@ class _ProfilePageState extends State<ProfilePage> {
       final icon = multipleCompanies ? Icons.business : Icons.apartment;
       final label = multipleCompanies ? 'Companies' : 'Company';
       menuTabs.add(Tab(icon: Icon(icon), text: label));
-      menuViews.add(const CompanyAdminPage());
+      //menuViews.add(const CompanyAdminPage());
     }
     return DefaultTabController(
       length: menuTabs.length,

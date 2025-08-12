@@ -185,6 +185,8 @@ class _CreateCompanyPageState extends State<CreateCompanyPage> {
                   clipBehavior: Clip.antiAlias,
                   child: CustomImagePicker(
                     aspectRatio: 1,
+                    deleteOld: true,
+                    addWatermark: true,
                     onImagePicked: (file, base64) {
                       setState(() {
                         _companyLogo = file;

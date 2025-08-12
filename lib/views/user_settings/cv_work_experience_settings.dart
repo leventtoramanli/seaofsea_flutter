@@ -1,7 +1,7 @@
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';
 
@@ -44,6 +44,10 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
           'title': TextEditingController(text: item['title'] ?? ''),
           'period': TextEditingController(text: item['period'] ?? ''),
           'period1': TextEditingController(text: item['period1'] ?? ''),
+          'engineBrand':
+              TextEditingController(text: item['engineBrand'] ?? ''),
+          'propulsionPower':
+              TextEditingController(text: item['propulsionPower'] ?? ''),
         });
       }
     } else {
@@ -79,12 +83,16 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
         'title': TextEditingController(),
         'period': TextEditingController(),
         'period1': TextEditingController(),
+        'engineBrand': TextEditingController(),
+        'propulsionPower': TextEditingController(),
       });
     });
   }
 
   void _removeExperience(int index) {
     setState(() {
+      // controller’ları leak etmemek için dispose
+      _controllers[index].forEach((_, c) => c.dispose());
       _workExperienceList.removeAt(index);
       _controllers.removeAt(index);
       _expanded.removeAt(index);
@@ -110,16 +118,22 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
           _controllers[i]['shipType']?.text ?? '';
       _workExperienceList[i]['title'] = _controllers[i]['title']?.text ?? '';
       _workExperienceList[i]['period'] = _controllers[i]['period']?.text ?? '';
-      _workExperienceList[i]['period1'] = _controllers[i]['period1']?.text ?? '';
+      _workExperienceList[i]['period1'] =
+          _controllers[i]['period1']?.text ?? '';
+      _workExperienceList[i]['engineBrand'] =
+          _controllers[i]['engineBrand']?.text ?? '';
+      _workExperienceList[i]['propulsionPower'] =
+          _controllers[i]['propulsionPower']?.text ?? '';
     }
 
     return _workExperienceList;
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final v1 = Provider.of<V1ApiManager>(context, listen: false);
+
     return Form(
       key: widget.formKey,
       child: Column(
@@ -169,36 +183,32 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Dinamik Position alanı
+                  // Position (V1)
                   DropdownSearch<Map<String, dynamic>>(
                     asyncItems: (String filter) async {
-                      final api =
-                          Provider.of<ApiManager>(context, listen: false);
                       final type = _workExperienceList[i]['type'] ?? 'sea';
+                      final category = type == 'office' ? 'Office' : 'Crew';
 
-                      String column = 'category';
-                      String value = type == 'office' ? 'Office' : 'Crew';
-
-                      final response = await api.post(
-                        context,
-                        'get_positions_by_handler',
-                        {
-                          'handler': {'column': column, 'value': value}
-                        },
+                      final resp = await v1.call(
+                        module: 'meta',
+                        action: 'positions',
+                        params: {'category': category},
                       );
 
-                      if (response['success'] && response['data'] != null) {
-                        final List data = response['data'];
+                      if (resp['success'] == true && resp['data'] != null) {
+                        final List data = resp['data'];
                         return data
-                            .where((pos) => pos['name']
-                                .toLowerCase()
-                                .contains(filter.toLowerCase()))
+                            .where((pos) =>
+                                (pos['name'] ?? '')
+                                    .toString()
+                                    .toLowerCase()
+                                    .contains(filter.toLowerCase()))
                             .cast<Map<String, dynamic>>()
                             .toList();
                       }
                       return [];
                     },
-                    itemAsString: (item) => item['name'] ?? '',
+                    itemAsString: (item) => (item['name'] ?? '').toString(),
                     selectedItem: _workExperienceList[i]['position_id'] != null
                         ? {
                             'id': _workExperienceList[i]['position_id'],
@@ -233,32 +243,33 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
                   const SizedBox(height: 12),
 
                   if (_workExperienceList[i]['type'] == 'sea') ...[
-                    // Sea-specific fields
+                    // Ship types (V1)
                     DropdownSearch<Map<String, dynamic>>(
                       asyncItems: (String filter) async {
-                        final api =
-                            Provider.of<ApiManager>(context, listen: false);
-                        final response =
-                            await api.post(context, 'get_ship_types', {});
-                        if (response['success'] == true &&
-                            response['data'] != null) {
-                          final List data = response['data'];
+                        final resp =
+                            await v1.call(module: 'meta', action: 'ship_types');
+                        if (resp['success'] == true &&
+                            resp['data'] != null) {
+                          final List data = resp['data'];
                           return data
-                              .where((shipType) => shipType['name']
-                                  .toLowerCase()
-                                  .contains(filter.toLowerCase()))
+                              .where((t) =>
+                                  (t['name'] ?? '')
+                                      .toString()
+                                      .toLowerCase()
+                                      .contains(filter.toLowerCase()))
                               .cast<Map<String, dynamic>>()
                               .toList();
                         }
                         return [];
                       },
-                      itemAsString: (item) => item['name'] ?? '',
+                      itemAsString: (item) => (item['name'] ?? '').toString(),
                       selectedItem: _workExperienceList[i]['ship_type_id'] !=
                               null
                           ? {
                               'id': _workExperienceList[i]['ship_type_id'],
-                              'name':
-                                  _workExperienceList[i]['ship_type_name'] ?? ''
+                              'name': _workExperienceList[i]
+                                      ['ship_type_name'] ??
+                                  ''
                             }
                           : null,
                       onChanged: (selectedItem) {
@@ -327,8 +338,7 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
                     ),
                     const SizedBox(height: 12),
                     CustomFormField(
-                      controller: _controllers[i]['engineBrand'] ??=
-                          TextEditingController(),
+                      controller: _controllers[i]['engineBrand']!,
                       themeProvider: themeProvider,
                       label: 'Engine Brand',
                       hint: 'Enter engine brand',
@@ -337,8 +347,7 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
                     ),
                     const SizedBox(height: 12),
                     CustomFormField(
-                      controller: _controllers[i]['propulsionPower'] ??=
-                          TextEditingController(),
+                      controller: _controllers[i]['propulsionPower']!,
                       themeProvider: themeProvider,
                       label: 'Propeller Power Transmission',
                       hint: 'Enter propulsion power transmission',
@@ -359,7 +368,7 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
                     controller: _controllers[i]['period']!,
                     themeProvider: themeProvider,
                     label: 'Period',
-                    hint: 'Enter period',
+                    hint: 'Enter start of period',
                     icon: const Icon(Icons.timeline),
                     validationMessage: 'Period is required',
                     isDate: true,
@@ -368,10 +377,10 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
                   CustomFormField(
                     controller: _controllers[i]['period1']!,
                     themeProvider: themeProvider,
-                    label: 'Period',
+                    label: 'End Period',
                     hint: 'Enter end of period',
                     icon: const Icon(Icons.timeline),
-                    validationMessage: 'Period is required',
+                    validationMessage: 'End period is required',
                     isDate: true,
                   ),
                   const SizedBox(height: 12),
@@ -388,5 +397,13 @@ class CVWorkExperienceSettingsState extends State<CVWorkExperienceSettings> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    for (final map in _controllers) {
+      map.forEach((_, c) => c.dispose());
+    }
+    super.dispose();
   }
 }

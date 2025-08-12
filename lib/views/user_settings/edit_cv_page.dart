@@ -1,12 +1,17 @@
+// lib/views/user_settings/edit_cv_page.dart
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/quill_delta.dart' as quill_delta;
-import 'package:provider/provider.dart';
-import 'package:seaofsea/services/date_time_service.dart';
-import 'package:seaofsea/utils/api_manager.dart';
-import 'package:seaofsea/views/user_settings/cv_popup_editor.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:provider/provider.dart';
+
+import 'package:seaofsea/services/date_time_service.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
+import 'package:seaofsea/views/user_settings/cv_popup_editor.dart';
+import 'package:seaofsea/widgets/online_images.dart';
 import 'package:seaofsea/widgets/test_with_social_icons.dart';
 
 class CVPageData {
@@ -15,11 +20,12 @@ class CVPageData {
   final bool isOwn;
   final List<dynamic> allCertificates;
 
-  CVPageData(
-      {required this.user,
-      required this.cv,
-      required this.isOwn,
-      required this.allCertificates});
+  CVPageData({
+    required this.user,
+    required this.cv,
+    required this.isOwn,
+    required this.allCertificates,
+  });
 }
 
 class EditCVPage extends StatefulWidget {
@@ -30,92 +36,96 @@ class EditCVPage extends StatefulWidget {
 }
 
 class _EditCVPageState extends State<EditCVPage> {
-  Future<Map<String, dynamic>> loadUserData() async {
-    final api = Provider.of<ApiManager>(context, listen: false);
-    final response = await api.post(context, 'get_user_info', {});
-    debugPrint('User all data: $response');
-    return response;
-  }
-
   Future<CVPageData> fetchCVPageData() async {
-    final api = Provider.of<ApiManager>(context, listen: false);
+    final api = Provider.of<V1ApiManager>(context, listen: false);
 
-    final user = await api.post(context, 'get_user_info', {});
-    final userId = user['data']?['id'];
+    // user.get_profile -> iki kat data zarfı
+    final userRes =
+        await api.call(module: 'user', action: 'get_profile', params: {}, context: context);
+    final userData = (userRes['data']?['data'] ?? userRes['data'] ?? {})
+        as Map<String, dynamic>;
+    final userId = userData['id'] ?? userData['user_id'];
     if (userId == null) throw Exception('User ID missing');
 
-    final cv = await api.post(context, 'get_user_cvs', {'user_id': userId});
-    final isOwn = cv['data']?['own'] == true;
+    // cv.get_cv -> yine iki kat data zarfı
+    final cvRes = await api.call(module: 'cv', action: 'get_cv', params: {}, context: context);
+    final cvData =
+        (cvRes['data']?['data'] ?? cvRes['data'] ?? {}) as Map<String, dynamic>;
 
-    final certResponse = await api.post(context, 'list_certificates', {});
-    final allCertificates = certResponse['data'] ?? [];
+    // cv.list_certificates -> iki kat data zarfı
+    final certRes =
+        await api.call(module: 'cv', action: 'list_certificates', params: {},context: context);
+    final allCertificates =
+        (certRes['data']?['data'] ?? certRes['data'] ?? []) as List<dynamic>;
+
+    final isOwn = (cvData['own'] == true) || (cvData['user_id'] == userId);
 
     return CVPageData(
-        user: user, cv: cv, isOwn: isOwn, allCertificates: allCertificates);
-  }
-
-  Widget sectionBox({
-    required String title,
-    required Widget child,
-    Widget? trailing,
-    bool isDark = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(30),
-      color: isDark ? Colors.grey[850] : Color.fromARGB(255, 225, 213, 178),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              SelectableText(
-                title,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-              if (trailing != null) trailing,
-            ],
-          ),
-          const SizedBox(height: 10),
-          child,
-        ],
-      ),
+      user: userData,
+      cv: {'data': cvData}, // mevcut kullanımını bozmamak için aynı şekil
+      isOwn: isOwn,
+      allCertificates: allCertificates,
     );
   }
 
-  dynamic userData;
-
-  @override
-  void initState() {
-    super.initState();
-    getUserInfo();
+  List<String> _parseStringList(dynamic raw) {
+    try {
+      if (raw == null) return [];
+      if (raw is List) {
+        return raw
+            .map((e) => e?.toString() ?? '')
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+      if (raw is String) {
+        if (raw.trim().isEmpty) return [];
+        if (raw.trim().startsWith('[')) {
+          final decoded = jsonDecode(raw);
+          if (decoded is List) {
+            return decoded
+                .map((e) => e?.toString() ?? '')
+                .where((e) => e.isNotEmpty)
+                .toList();
+          }
+        }
+        // Single value
+        return [raw];
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
   }
 
-  void getUserInfo() async {
-    final data = await loadUserData();
-    setState(() {
-      userData = data;
-    });
+  List<dynamic> _parseDynamicList(dynamic raw) {
+    try {
+      if (raw == null) return [];
+      if (raw is List) return raw;
+      if (raw is String && raw.trim().isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        return decoded is List ? decoded : [];
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
   }
 
-  Widget extractPlainText(String jsonDelta) {
+  Widget _extractRichText(String jsonDelta) {
     try {
       final delta = quill_delta.Delta.fromJson(jsonDecode(jsonDelta));
       final doc = quill.Document.fromDelta(delta);
       final controller = quill.QuillController(
-          document: doc,
-          selection: TextSelection.collapsed(offset: 0),
-          readOnly: true);
+        document: doc,
+        selection: const TextSelection.collapsed(offset: 0),
+        readOnly: true,
+      );
       return DefaultTextStyle(
-          style: const TextStyle(color: Colors.black),
-          child: quill.QuillEditor.basic(controller: controller));
-    } catch (e) {
-      return '' as quill.QuillEditor;
+        style: const TextStyle(color: Colors.black),
+        child: quill.QuillEditor.basic(controller: controller),
+      );
+    } catch (_) {
+      return const SizedBox.shrink();
     }
   }
 
@@ -126,182 +136,135 @@ class _EditCVPageState extends State<EditCVPage> {
       body: FutureBuilder<CVPageData>(
         future: fetchCVPageData(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Bir şeyler ters gitti: ${snapshot.error}',
+                      textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => setState(() {}), // yeniden dene
+                    child: const Text('Yeniden dene'),
+                  ),
+                ],
+              ),
+            );
+          }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final data = snapshot.data!;
+          final user = data.user;
           final cv = data.cv;
           final isOwn = data.isOwn;
           final allCertificates = data.allCertificates;
 
-          String basicInfo = cv['data']?['basic_info'] ?? '';
-          String professionalTitle = cv['data']?['professional_title'] ?? '';
-          final contactData = cv['data'] ?? {};
-          final lastUpdated = cv['data']?['updated_at'] ?? '';
+          String basicInfo = (cv['data']?['basic_info'] ?? '') as String;
+          String professionalTitle =
+              (cv['data']?['professional_title'] ?? '') as String;
 
-          final countryId = contactData['country_name'];
-          final cityId = contactData['city_name'];
-          final address = contactData['address'] ?? '';
-          final zipCode = contactData['zip_code'] ?? '';
+          final contactData = (cv['data'] ?? {}) as Map<String, dynamic>;
+          final lastUpdated = contactData['updated_at']?.toString() ?? '';
 
-          final phones =
-              List<String>.from(jsonDecode(contactData['phone'] ?? '[]'));
-          final emails =
-              List<String>.from(jsonDecode(contactData['email'] ?? '[]'));
-          final socials =
-              List<String>.from(jsonDecode(contactData['social'] ?? '[]'));
+          final countryName = contactData['country_name'];
+          final cityName = contactData['city_name'];
+          final address = contactData['address']?.toString() ?? '';
+          final zipCode = contactData['zip_code']?.toString() ?? '';
 
-          final Widget myWidgets;
+          final phones = _parseStringList(contactData['phone']);
+          final emails = _parseStringList(contactData['email']);
+          final socials = _parseStringList(contactData['social']);
 
           final List<Widget> contactWidgets = [];
 
-          final referencesRaw = cv['data']?['references'];
-          List<dynamic> referencesList = [];
-          final birthDate = userData['data']['dob'] ?? '-';
-          final placeBirth = userData['data']['pob'] ?? '-';
-          final gender = userData['data']['gender'] ?? '-';
-          final maritalStatus = userData['data']['maritalStatus'] ?? '-';
-          myWidgets = 
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Born on:'),
-                    Text(DateTimeService.formatDate(birthDate, context)),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Place of Birth:'),
-                    Text(placeBirth),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Gender:'),
-                    Text(gender),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Marital Status:'),
-                    Text(maritalStatus),
-                  ],
-                ),
-              ],
-            );
-          
-          if (referencesRaw is String) {
-            try {
-              referencesList = jsonDecode(referencesRaw);
-            } catch (e) {
-              debugPrint("Error decoding references: $e");
-            }
-          } else if (referencesRaw is List) {
-            referencesList = referencesRaw;
-          }
-
-          final workExperienceRaw = cv['data']?['work_experience'];
-          List<dynamic> workExperienceList = [];
-
-          if (workExperienceRaw is String && workExperienceRaw.isNotEmpty) {
-            try {
-              workExperienceList = jsonDecode(workExperienceRaw);
-            } catch (e) {
-              debugPrint("Error decoding work experience: $e");
-            }
-          } else if (workExperienceRaw is List) {
-            workExperienceList = workExperienceRaw;
-          }
-
           if (address.trim().isNotEmpty) {
+            contactWidgets.add(const SizedBox(height: 4));
             contactWidgets
                 .add(TextWithIcons(text: address, isColored: Colors.white));
           }
 
-          if (cityId != null || countryId != null) {
-            contactWidgets.add(
-              TextWithIcons(
-                  text: '${cityId ?? ''} / ${countryId ?? ''}'.trim(),
-                  isColored: Colors.white),
-            );
+          if (cityName != null || countryName != null) {
+            final loc = '${cityName ?? ''} / ${countryName ?? ''}'.trim();
+            if (loc.isNotEmpty && loc != '/') {
+              contactWidgets.add(
+                TextWithIcons(text: loc, isColored: Colors.white),
+              );
+            }
           }
 
           if (zipCode.trim().isNotEmpty) {
-            contactWidgets.add(TextWithIcons(
-                text: 'Zip/Postal Code: $zipCode', isColored: Colors.white));
+            contactWidgets.add(
+              TextWithIcons(
+                text: 'Zip/Postal Code: $zipCode',
+                isColored: Colors.white,
+              ),
+            );
           }
 
           for (final phone in phones) {
             contactWidgets
                 .add(TextWithIcons(text: phone, isColored: Colors.white));
           }
-
           for (final email in emails) {
             contactWidgets
                 .add(TextWithIcons(text: email, isColored: Colors.white));
           }
-
           for (final social in socials) {
             contactWidgets
                 .add(TextWithIcons(text: social, isColored: Colors.white));
           }
 
-          final skillsRaw = cv['data']?['skills'];
-          List<dynamic> skillsList = [];
+          final referencesList = _parseDynamicList(contactData['references']);
+          final workExperienceList =
+              _parseDynamicList(contactData['work_experience']);
+          final skillsList = _parseDynamicList(contactData['skills']);
+          final languagesList = _parseDynamicList(contactData['language']);
+          final stcwCertificates =
+              _parseDynamicList(contactData['certificates']);
+          final educationList = _parseDynamicList(contactData['education']);
 
-          if (skillsRaw is String) {
-            try {
-              skillsList = jsonDecode(skillsRaw);
-            } catch (_) {
-              skillsList = [];
-            }
-          } else if (skillsRaw is List) {
-            skillsList = skillsRaw;
-          }
+          final birthDate = user['dob'];
+          final placeBirth = user['pob']?.toString() ?? '-';
+          final gender = user['gender']?.toString() ?? '-';
+          final maritalStatus = user['maritalStatus']?.toString() ?? '-';
 
-          final languagesRaw = cv['data']?['language'];
-          List<dynamic> languagesList = [];
-
-          if (languagesRaw is String) {
-            try {
-              languagesList = jsonDecode(languagesRaw);
-            } catch (_) {
-              languagesList = [];
-            }
-          } else if (languagesRaw is List) {
-            languagesList = languagesRaw;
-          }
-          final stcwRaw = cv['data']?['certificates'];
-          List<dynamic> stcwCertificates = [];
-
-          if (stcwRaw is String && stcwRaw.isNotEmpty) {
-            try {
-              stcwCertificates = jsonDecode(stcwRaw);
-            } catch (_) {
-              stcwCertificates = [];
-            }
-          } else if (stcwRaw is List) {
-            stcwCertificates = stcwRaw;
-          }
-
-          final educationRaw = cv['data']?['education'];
-          List<dynamic> educationList = [];
-
-          if (educationRaw is String) {
-            try {
-              educationList = jsonDecode(educationRaw);
-            } catch (_) {
-              educationList = [];
-            }
-          } else if (educationRaw is List) {
-            educationList = educationRaw;
+          Widget sectionBox({
+            required String title,
+            required Widget child,
+            Widget? trailing,
+            bool isDark = false,
+          }) {
+            return Container(
+              padding: const EdgeInsets.all(30),
+              color: isDark
+                  ? Colors.grey[850]
+                  : const Color.fromARGB(255, 225, 213, 178),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      SelectableText(
+                        title,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                      if (trailing != null) trailing,
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  child,
+                ],
+              ),
+            );
           }
 
           final educationWidgets = educationList.isEmpty
@@ -312,11 +275,11 @@ class _EditCVPageState extends State<EditCVPage> {
                   )
                 ]
               : educationList.map<Widget>((edu) {
-                  final school = edu['school_name'] ?? '';
-                  final degree = edu['degree'] ?? '';
-                  final start = edu['start_date'] ?? '';
-                  final end = edu['end_date'] ?? '';
-                  final desc = edu['description'] ?? '';
+                  final school = edu['school_name']?.toString() ?? '';
+                  final degree = edu['degree']?.toString() ?? '';
+                  final start = edu['start_date']?.toString() ?? '';
+                  final end = edu['end_date']?.toString() ?? '';
+                  final desc = edu['description']?.toString() ?? '';
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -326,7 +289,9 @@ class _EditCVPageState extends State<EditCVPage> {
                         Text(
                           '$school ($start - $end)',
                           style: const TextStyle(
-                              fontWeight: FontWeight.bold, color: Colors.white),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
                         if (degree.isNotEmpty)
                           Text(
@@ -345,7 +310,6 @@ class _EditCVPageState extends State<EditCVPage> {
                     ),
                   );
                 }).toList();
-          debugPrint("CV Veri: ${cv['data']}");
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24),
@@ -354,71 +318,42 @@ class _EditCVPageState extends State<EditCVPage> {
                 constraints: const BoxConstraints(maxWidth: 1200),
                 child: Column(
                   children: [
-                    //upper part
+                    // upper part
                     IntrinsicHeight(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          //image
+                          // image
                           Expanded(
                             flex: 35,
                             child: Container(
                               color: Colors.grey[850],
                               padding: const EdgeInsets.all(20),
-                              child: FutureBuilder<Map<String, dynamic>>(
-                                future: loadUserData(),
-                                builder: (context, snapshot) {
-                                  final api = Provider.of<ApiManager>(context,
-                                      listen: false);
-                                  final imageUrl = (snapshot.hasData &&
-                                          snapshot.data?['data']
-                                                  ?['user_image'] !=
-                                              null)
-                                      ? api.showImage(
-                                          'images/user/user/${snapshot.data!['data']['user_image']}',
-                                          false)
-                                      : null;
-
-                                  return CircleAvatar(
-                                    radius: 100,
-                                    backgroundColor: Colors.grey[300],
-                                    child: ClipOval(
-                                      child: imageUrl != null
-                                          ? Image.network(
-                                              imageUrl,
-                                              width: 200,
-                                              height: 200,
-                                              fit: BoxFit.cover,
-                                              loadingBuilder: (context, child,
-                                                  loadingProgress) {
-                                                if (loadingProgress == null) {
-                                                  return child;
-                                                }
-                                                return const Center(
-                                                    child:
-                                                        CircularProgressIndicator());
-                                              },
-                                              errorBuilder:
-                                                  (context, error, stackTrace) {
-                                                return const Icon(Icons.person,
-                                                    size: 200,
-                                                    color: Colors.white);
-                                              },
-                                            )
-                                          : const Icon(Icons.person,
-                                              size: 200, color: Colors.white),
-                                    ),
-                                  );
-                                },
+                              child: CircleAvatar(
+                                radius: 100,
+                                backgroundColor: Colors.grey[300],
+                                child: ClipOval(
+                                  child: OnlineImage(
+                                    imagePath: 'user/',
+                                    imageName:
+                                        user['user_image']?.toString() ?? '',
+                                    sizeW: 200,
+                                    sizeH: 200,
+                                    rounded: true,
+                                    border: true,
+                                    fallbackAsset:
+                                        'assets/sailorHat.png',
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                          //profile
+                          // profile
                           Expanded(
                             flex: 65,
                             child: Container(
                               padding: const EdgeInsets.all(30),
-                              color: Color.fromARGB(255, 225, 213, 178),
+                              color: const Color.fromARGB(255, 225, 213, 178),
                               child: sectionBox(
                                 title: 'Profile',
                                 trailing: isOwn
@@ -433,7 +368,7 @@ class _EditCVPageState extends State<EditCVPage> {
                                               title: 'Edit Profile',
                                               type: 'basic_info',
                                               initialText: cv['data']
-                                                      ['basic_info'] ??
+                                                      ?['basic_info'] ??
                                                   '',
                                               onSubmit: (updatedText) async {
                                                 setState(() {
@@ -446,12 +381,13 @@ class _EditCVPageState extends State<EditCVPage> {
                                       )
                                     : null,
                                 child: basicInfo.isNotEmpty
-                                    ? extractPlainText(basicInfo)
-                                    : Text(
+                                    ? _extractRichText(basicInfo)
+                                    : const Text(
                                         'Not filled yet.',
-                                        style: const TextStyle(
-                                            color: Colors.black,
-                                            fontStyle: FontStyle.italic),
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontStyle: FontStyle.italic,
+                                        ),
                                       ),
                               ),
                             ),
@@ -459,11 +395,11 @@ class _EditCVPageState extends State<EditCVPage> {
                         ],
                       ),
                     ),
-                    //name and title part
+                    // name and title part
                     IntrinsicHeight(
                       child: Row(
                         children: [
-                          //title part
+                          // title
                           Expanded(
                             flex: 35,
                             child: Container(
@@ -475,18 +411,24 @@ class _EditCVPageState extends State<EditCVPage> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   professionalTitle.isNotEmpty
-                                      ? Text(professionalTitle,
+                                      ? Text(
+                                          professionalTitle,
+                                          style: const TextStyle(
+                                            color: Color.fromARGB(
+                                                255, 225, 213, 178),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Professional Title',
                                           style: TextStyle(
-                                              color: Color.fromARGB(
-                                                  255, 225, 213, 178),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold))
-                                      : const Text('Professional Title',
-                                          style: TextStyle(
-                                              color: Color.fromARGB(
-                                                  255, 225, 213, 178),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold)),
+                                            color: Color.fromARGB(
+                                                255, 225, 213, 178),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                   if (isOwn)
                                     IconButton(
                                       icon: const Icon(Icons.edit),
@@ -511,7 +453,7 @@ class _EditCVPageState extends State<EditCVPage> {
                               ),
                             ),
                           ),
-                          //name
+                          // name
                           Expanded(
                             flex: 65,
                             child: Container(
@@ -519,22 +461,24 @@ class _EditCVPageState extends State<EditCVPage> {
                               padding: const EdgeInsets.all(20),
                               alignment: Alignment.center,
                               child: Text(
-                                  '${userData['data']['name'].toString().toUpperCase()} ${userData['data']['surname'].toString().toUpperCase()}',
-                                  style: TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black)),
+                                '${(user['name'] ?? '').toString().toUpperCase()} ${(user['surname'] ?? '').toString().toUpperCase()}',
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black,
+                                ),
+                              ),
                             ),
                           )
                         ],
                       ),
                     ),
-                    //lover part
+                    // lower part
                     IntrinsicHeight(
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          //left side
+                          // left side
                           Expanded(
                             flex: 35,
                             child: Container(
@@ -543,9 +487,67 @@ class _EditCVPageState extends State<EditCVPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  myWidgets,
+                                  // personal details
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text('Born on:',
+                                              style: TextStyle(
+                                                  color: Colors.white)),
+                                          Text(
+                                            DateTimeService.formatDate(
+                                                birthDate, context),
+                                            style: const TextStyle(
+                                                color: Colors.white),
+                                          ),
+                                        ],
+                                      ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text('Place of Birth:',
+                                              style: TextStyle(
+                                                  color: Colors.white)),
+                                          Text(placeBirth,
+                                              style: const TextStyle(
+                                                  color: Colors.white)),
+                                        ],
+                                      ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text('Gender:',
+                                              style: TextStyle(
+                                                  color: Colors.white)),
+                                          Text(gender,
+                                              style: const TextStyle(
+                                                  color: Colors.white)),
+                                        ],
+                                      ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text('Marital Status:',
+                                              style: TextStyle(
+                                                  color: Colors.white)),
+                                          Text(maritalStatus,
+                                              style: const TextStyle(
+                                                  color: Colors.white)),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                   const SizedBox(height: 20),
-                                  //contact
+
+                                  // contact
                                   _buildSimpleSection(
                                     'Contact',
                                     Column(
@@ -554,7 +556,7 @@ class _EditCVPageState extends State<EditCVPage> {
                                       children: contactWidgets,
                                     ),
                                     true,
-                                    isOwn: true, //isOwnCV,
+                                    isOwn: true,
                                     widget: true,
                                     isColored: Colors.white,
                                     onEdit: () {
@@ -563,7 +565,8 @@ class _EditCVPageState extends State<EditCVPage> {
                                         builder: (context) => CVPopupEditor(
                                           title: 'Edit Contact',
                                           type: 'contact',
-                                          initialCV: cv['data'],
+                                          initialCV: cv['data']
+                                              as Map<String, dynamic>?,
                                           onSubmit: (value) {
                                             if (value == 'success') {
                                               setState(() {});
@@ -574,27 +577,30 @@ class _EditCVPageState extends State<EditCVPage> {
                                     },
                                   ),
                                   const SizedBox(height: 20),
-                                  //Expertise
+
+                                  // expertise
                                   _buildSimpleSection(
                                     'Expertise',
                                     Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: skillsList.isEmpty
-                                          ? [
-                                              const Text(
-                                                'No expertise added yet.',
-                                                style: TextStyle(
-                                                    color: Colors.grey),
-                                              )
+                                          ? const [
+                                              Text('No expertise added yet.',
+                                                  style: TextStyle(
+                                                      color: Colors.grey))
                                             ]
                                           : skillsList.map<Widget>((e) {
-                                              final name = e['name'] ?? '';
+                                              final name =
+                                                  e['name']?.toString() ?? '';
                                               final percentage =
-                                                  (e['percentage'] ?? 0)
-                                                      .toDouble();
+                                                  double.tryParse(
+                                                        (e['percentage'] ?? '0')
+                                                            .toString(),
+                                                      ) ??
+                                                      0;
                                               return _buildSkill(
-                                                  name, percentage ?? 0);
+                                                  name, percentage);
                                             }).toList(),
                                     ),
                                     true,
@@ -607,7 +613,8 @@ class _EditCVPageState extends State<EditCVPage> {
                                         builder: (context) => CVPopupEditor(
                                           title: 'Edit Skills',
                                           type: 'skills',
-                                          initialCV: cv['data'],
+                                          initialCV: cv['data']
+                                              as Map<String, dynamic>?,
                                           onSubmit: (value) {
                                             if (value == 'success') {
                                               setState(() {});
@@ -618,26 +625,30 @@ class _EditCVPageState extends State<EditCVPage> {
                                     },
                                   ),
                                   const SizedBox(height: 20),
+
+                                  // languages
                                   _buildSimpleSection(
                                     'Languages',
                                     Column(
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: languagesList.isEmpty
-                                          ? [
-                                              const Text(
-                                                'No languages added yet.',
-                                                style: TextStyle(
-                                                    color: Colors.grey),
-                                              )
+                                          ? const [
+                                              Text('No languages added yet.',
+                                                  style: TextStyle(
+                                                      color: Colors.grey))
                                             ]
                                           : languagesList.map<Widget>((e) {
-                                              final name = e['name'] ?? '';
+                                              final name =
+                                                  e['name']?.toString() ?? '';
                                               final percentage =
-                                                  (e['percentage'] ?? 0)
-                                                      .toDouble();
+                                                  double.tryParse(
+                                                        (e['percentage'] ?? '0')
+                                                            .toString(),
+                                                      ) ??
+                                                      0;
                                               return _buildSkill(
-                                                  name, percentage ?? 0);
+                                                  name, percentage);
                                             }).toList(),
                                     ),
                                     true,
@@ -650,7 +661,8 @@ class _EditCVPageState extends State<EditCVPage> {
                                         builder: (context) => CVPopupEditor(
                                           title: 'Edit Languages',
                                           type: 'language',
-                                          initialCV: cv['data'],
+                                          initialCV: cv['data']
+                                              as Map<String, dynamic>?,
                                           onSubmit: (value) {
                                             if (value == 'success') {
                                               setState(() {});
@@ -661,6 +673,8 @@ class _EditCVPageState extends State<EditCVPage> {
                                     },
                                   ),
                                   const SizedBox(height: 20),
+
+                                  // education
                                   _buildSimpleSection(
                                     'Education',
                                     Column(
@@ -678,7 +692,8 @@ class _EditCVPageState extends State<EditCVPage> {
                                         builder: (context) => CVPopupEditor(
                                           title: 'Edit Education',
                                           type: 'education',
-                                          initialCV: cv['data'],
+                                          initialCV: cv['data']
+                                              as Map<String, dynamic>?,
                                           onSubmit: (value) {
                                             if (value == 'success') {
                                               setState(() {});
@@ -692,16 +707,17 @@ class _EditCVPageState extends State<EditCVPage> {
                               ),
                             ),
                           ),
-                          //right side
+
+                          // right side
                           Expanded(
                             flex: 65,
                             child: Container(
-                              color: Color.fromARGB(255, 225, 213, 178),
+                              color: const Color.fromARGB(255, 225, 213, 178),
                               padding: const EdgeInsets.all(30),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  // Work Experience Section
+                                  // Work Experience
                                   _buildSimpleSection(
                                     'Work Experience',
                                     _buildWorkExperienceSection(
@@ -715,7 +731,8 @@ class _EditCVPageState extends State<EditCVPage> {
                                         builder: (context) => CVPopupEditor(
                                           title: 'Edit Work Experience',
                                           type: 'work_experience',
-                                          initialCV: cv['data'],
+                                          initialCV: cv['data']
+                                              as Map<String, dynamic>?,
                                           onSubmit: (value) {
                                             if (value == 'success') {
                                               setState(() {});
@@ -727,6 +744,8 @@ class _EditCVPageState extends State<EditCVPage> {
                                   ),
 
                                   const SizedBox(height: 24),
+
+                                  // References
                                   _buildSimpleSection(
                                     'References',
                                     _buildReferenceSection(referencesList),
@@ -739,7 +758,8 @@ class _EditCVPageState extends State<EditCVPage> {
                                         builder: (context) => CVPopupEditor(
                                           title: 'Edit References',
                                           type: 'references',
-                                          initialCV: cv['data'],
+                                          initialCV: cv['data']
+                                              as Map<String, dynamic>?,
                                           onSubmit: (value) {
                                             if (value == 'success') {
                                               setState(() {});
@@ -749,12 +769,17 @@ class _EditCVPageState extends State<EditCVPage> {
                                       );
                                     },
                                   ),
+
                                   const SizedBox(height: 24),
+
+                                  // STCW (only own)
                                   if (isOwn)
                                     _buildSimpleSection(
                                       'Passport, Health, Certificates',
                                       _buildStcwCertificatesSection(
-                                          stcwCertificates, allCertificates),
+                                        stcwCertificates,
+                                        allCertificates,
+                                      ),
                                       false,
                                       isOwn: isOwn,
                                       widget: true,
@@ -765,7 +790,8 @@ class _EditCVPageState extends State<EditCVPage> {
                                             title: 'Edit STCW Certificates',
                                             type: 'stcw_certificates',
                                             allCertificates: allCertificates,
-                                            initialCV: cv['data'],
+                                            initialCV: cv['data']
+                                                as Map<String, dynamic>?,
                                             onSubmit: (value) {
                                               if (value == 'success') {
                                                 setState(() {});
@@ -784,8 +810,9 @@ class _EditCVPageState extends State<EditCVPage> {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                        'Last Update: ${DateTimeService.formatFromISO(lastUpdated, context)}',
-                        style: TextStyle(color: Colors.black, fontSize: 12)),
+                      'Last Update: ${DateTimeService.formatFromISO(lastUpdated, context)}',
+                      style: const TextStyle(color: Colors.black, fontSize: 12),
+                    ),
                   ],
                 ),
               ),
@@ -804,18 +831,26 @@ class _EditCVPageState extends State<EditCVPage> {
         style: TextStyle(color: Colors.black),
       );
     }
-
-    // 📌 Sertifikaları gruplama
-    final Map<int, List<Map<String, dynamic>>> grouped = {};
-    for (var cert in certs) {
-      final groupId = int.tryParse(allCertificates
-              .firstWhere((c) => c['id'] == cert['id'])['group_id']
-              .toString()) ??
-          0;
-      grouped.putIfAbsent(groupId, () => []).add(cert as Map<String, dynamic>);
+    
+    Map<String, dynamic> _findCertInfo(List<dynamic> all, dynamic id) {
+      for (final c in all) {
+        final map = (c is Map) ? c : null;
+        if (map == null) continue;
+        if ('${map['id']}' == '$id') return Map<String, dynamic>.from(map);
+      }
+      return const {};
     }
 
-    // 📌 Grup isimleri
+    // Group by group_id
+    final Map<int, List<Map<String, dynamic>>> grouped = {};
+    for (var cert in certs) {
+      if (cert is! Map) continue;
+      final cid = cert['id'];
+      final match = _findCertInfo(allCertificates, cid);
+      final gid = int.tryParse((match?['group_id'] ?? '0').toString()) ?? 0;
+      grouped.putIfAbsent(gid, () => []).add(Map<String, dynamic>.from(cert));
+    }
+
     final Map<int, String> groupNames = {
       1: 'Travel Documents',
       2: 'Medical Certificates',
@@ -839,16 +874,11 @@ class _EditCVPageState extends State<EditCVPage> {
       children: sortedGroupIds.map((groupId) {
         final groupCerts = grouped[groupId]!;
 
-        // 📌 Her gruptaki sertifikaları sıralama
         groupCerts.sort((a, b) {
-          final orderA = int.tryParse(allCertificates
-                  .firstWhere((c) => c['id'] == a['id'])['sort_order']
-                  .toString()) ??
-              0;
-          final orderB = int.tryParse(allCertificates
-                  .firstWhere((c) => c['id'] == b['id'])['sort_order']
-                  .toString()) ??
-              0;
+          final infoA = _findCertInfo(allCertificates, a['id']);
+          final infoB = _findCertInfo(allCertificates, b['id']);
+          final orderA = int.tryParse('${infoA['sort_order'] ?? 0}') ?? 0;
+          final orderB = int.tryParse('${infoB['sort_order'] ?? 0}') ?? 0;
           return orderA.compareTo(orderB);
         });
 
@@ -867,34 +897,32 @@ class _EditCVPageState extends State<EditCVPage> {
               ),
             ),
             ...groupCerts.map((cert) {
-              final certInfo =
-                  allCertificates.firstWhere((c) => c['id'] == cert['id']);
-              final name =
-                  '${certInfo['name'] ?? ''} (${certInfo['stcw_code'] ?? ''})';
-              final issue = cert['isd'] ?? '-';
-              final expire = cert['exd'] ?? '-';
+              final certInfo = _findCertInfo(allCertificates, cert['id']);
+              final rawName =
+                  (certInfo['name'] ?? 'Unknown Certificate').toString();
+              final stcwCode = (certInfo['stcw_code'] ?? '').toString();
+              final displayName =
+                  stcwCode.isNotEmpty ? '$rawName ($stcwCode)' : rawName;
 
-              // 🟦 Özelleşmiş alanlar (Pasaport, Seaman’s Book, Drivers License gibi)
-              final docNumber = cert['dn']; // doc number kısaca
-
-              // 🟦 Vize bilgileri (Seaman Visa için)
+              final issue = cert['isd']?.toString() ?? '-';
+              final expire = cert['exd']?.toString() ?? '-';
+              final docNumber = cert['dn']; // number/type
               final visas = cert['visas'] as List<dynamic>?;
+
+              final isSeamanVisa = rawName == 'Seaman Visa';
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 🟦 Sertifika adı
                     Text(
-                      name,
+                      displayName,
                       style: const TextStyle(
                         fontWeight: FontWeight.w500,
                         color: Colors.black87,
                       ),
                     ),
-
-                    // 🟦 Document number varsa göster
                     if (docNumber != null && docNumber.toString().isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(left: 8.0),
@@ -903,27 +931,20 @@ class _EditCVPageState extends State<EditCVPage> {
                           style: const TextStyle(color: Colors.black54),
                         ),
                       ),
-
-                    // 🟦 Issue & Expiry tarihleri (Seaman Visa harici)
-                    if (name != 'Seaman Visa')
+                    if (!isSeamanVisa)
                       Padding(
                         padding: const EdgeInsets.only(left: 8.0, top: 2.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Issue: $issue Expire: $expire',
-                                style: const TextStyle(color: Colors.black54)),
-                          ],
+                        child: Text(
+                          'Issue: $issue   Expire: $expire',
+                          style: const TextStyle(color: Colors.black54),
                         ),
                       ),
-
-                    // 🟦 Seaman Visa ise alt vize listesi
-                    if (name == 'Seaman Visa' && visas != null)
+                    if (isSeamanVisa && visas != null)
                       Column(
                         children: visas.map((visa) {
-                          final visaName = visa['vn'] ?? '-';
-                          final visaIssue = visa['isd'] ?? '-';
-                          final visaExpire = visa['exd'] ?? '-';
+                          final visaName = visa['vn']?.toString() ?? '-';
+                          final visaIssue = visa['isd']?.toString() ?? '-';
+                          final visaExpire = visa['exd']?.toString() ?? '-';
                           return Padding(
                             padding: const EdgeInsets.only(left: 8.0, top: 4.0),
                             child: Column(
@@ -932,7 +953,7 @@ class _EditCVPageState extends State<EditCVPage> {
                                 Text('Visa: $visaName',
                                     style:
                                         const TextStyle(color: Colors.black)),
-                                Text('Issue: $visaIssue Expire: $visaExpire',
+                                Text('Issue: $visaIssue   Expire: $visaExpire',
                                     style:
                                         const TextStyle(color: Colors.black54)),
                               ],
@@ -961,19 +982,21 @@ class _EditCVPageState extends State<EditCVPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: references.map<Widget>((ref) {
-        final title = ref['title'] ?? '';
-        final name = ref['name'] ?? '';
-        final company = ref['company'] ?? '';
-        final contact = ref['contact'] ?? '';
+        final title = ref['title']?.toString() ?? '';
+        final name = ref['name']?.toString() ?? '';
+        final company = ref['company']?.toString() ?? '';
+        final contact = ref['contact']?.toString() ?? '';
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('$title: $name',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Colors.black)),
+              Text(
+                '$title: $name',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.black),
+              ),
               if (company.isNotEmpty)
                 Text('Company: $company',
                     style: const TextStyle(color: Colors.black)),
@@ -989,35 +1012,38 @@ class _EditCVPageState extends State<EditCVPage> {
 
   Widget _buildWorkExperienceSection(List<dynamic> experiences) {
     if (experiences.isEmpty) {
-      return const Text('No work experience added yet.',
-          style: TextStyle(color: Colors.black));
+      return const Text(
+        'No work experience added yet.',
+        style: TextStyle(color: Colors.black),
+      );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: experiences.map<Widget>((exp) {
-        final type = exp['type'] ?? '';
-        final position =
-            exp['position_name'] ?? exp['position'] ?? exp['title'] ?? '';
-        final period = exp['period'] ?? '';
-        final period1 = exp['period1'] ?? '';
-        final company = exp['company'] ?? '';
-        final shipName = exp['shipName'] ?? '';
-        final flag = exp['flag'] ?? '';
-        final shipType = exp['shipType'] ?? '';
-        final grt = exp['grt'] ?? '';
-        final kw = exp['kw'] ?? '';
-        final details = exp['details'] ?? [];
+        final type = exp['type']?.toString() ?? '';
+        final position = exp['position_name']?.toString() ??
+            exp['position']?.toString() ??
+            exp['title']?.toString() ??
+            '';
+        final period = exp['period']?.toString() ?? '';
+        final period1 = exp['period1']?.toString() ?? '';
+        final company = exp['company']?.toString() ?? '';
+        final shipName = exp['shipName']?.toString() ?? '';
+        final flag = exp['flag']?.toString() ?? '';
+        final shipType = exp['shipType']?.toString() ?? '';
+        final grt = exp['grt']?.toString() ?? '';
+        final kw = exp['kw']?.toString() ?? '';
+        final details =
+            (exp['details'] is List) ? exp['details'] as List : const [];
 
-        // Ortak Başlık
         final header = Text(
           '$position (${period.isNotEmpty ? period : 'N/A'} - ${period1.isNotEmpty ? period1 : 'N/A'})',
           style:
               const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
         );
 
-        // Gemiyse yan yana gemi özellikleri
-        Widget shipDetails = Container();
+        Widget shipDetails = const SizedBox.shrink();
         if (type == 'sea') {
           shipDetails = Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1044,8 +1070,7 @@ class _EditCVPageState extends State<EditCVPage> {
           );
         }
 
-        // Office için sadece company
-        Widget officeDetails = Container();
+        Widget officeDetails = const SizedBox.shrink();
         if (type == 'office' && company.isNotEmpty) {
           officeDetails = Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1054,15 +1079,14 @@ class _EditCVPageState extends State<EditCVPage> {
           );
         }
 
-        // Description kısmı (details) hep altta
-        Widget detailsSection = Container();
-        if (details is List && details.isNotEmpty) {
+        Widget detailsSection = const SizedBox.shrink();
+        if (details.isNotEmpty) {
           detailsSection = Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: details.map<Widget>((d) {
-                return Text('• $d',
+                return Text('• ${d.toString()}',
                     style: const TextStyle(color: Colors.black));
               }).toList(),
             ),
@@ -1077,7 +1101,7 @@ class _EditCVPageState extends State<EditCVPage> {
               header,
               if (type == 'sea') shipDetails,
               if (type == 'office') officeDetails,
-              if (detailsSection is! Container) detailsSection,
+              if (details.isNotEmpty) detailsSection,
             ],
           ),
         );
@@ -1092,7 +1116,7 @@ class _EditCVPageState extends State<EditCVPage> {
         Text(label, style: const TextStyle(color: Colors.white)),
         const SizedBox(height: 4),
         LinearProgressIndicator(
-          value: value / 100,
+          value: (value.clamp(0, 100)) / 100,
           backgroundColor: Colors.white24,
           color: const Color(0xFFF4B400),
           minHeight: 6,
@@ -1111,7 +1135,6 @@ class _EditCVPageState extends State<EditCVPage> {
     Color? isColored,
     VoidCallback? onEdit,
   }) {
-    debugPrint('isColored: $isColored');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1142,9 +1165,10 @@ class _EditCVPageState extends State<EditCVPage> {
         widget
             ? content
             : Text(
-                content,
+                content?.toString() ?? '',
                 style: TextStyle(
-                    color: isColored ?? (isDark ? Colors.white : Colors.black)),
+                  color: isColored ?? (isDark ? Colors.white : Colors.black),
+                ),
               ),
       ],
     );

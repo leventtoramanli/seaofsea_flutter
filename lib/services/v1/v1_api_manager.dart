@@ -1,9 +1,16 @@
+// lib/services/v1/v1_api_manager.dart
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:http_parser/http_parser.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+
+import 'package:seaofsea/services/v1/auth_service.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
 import 'v1_config.dart';
@@ -11,42 +18,73 @@ import 'v1_config.dart';
 class V1ApiManager {
   final String baseUrl;
   final SecureStorage _storage = SecureStorage();
-  int _retryCount = 0;
+  String? deviceUUID;
+  static bool debugForceExpiringSoon = false; // debug amaçlı
+
+  /// Aynı anda gelen refresh isteklerini tekilleştirmek için.
+  /// true = refresh başarılı, false = başarısız.
+  static Future<bool>? _refreshLock;
 
   V1ApiManager({this.baseUrl = V1Config.baseUrl});
+
+  Future<void> _initDeviceUUID() async {
+    deviceUUID ??= await _storage.readSecureData('deviceUUID');
+  }
+
+  /// 401 sonrası global yönlendirme için (örn. login’e dön)
+  static void Function()? onUnauthorized;
+
+  /// deviceUUID yoksa üret ve kaydet (refresh öncesi garanti ederiz)
+  Future<void> _ensureDeviceUUID() async {
+    await _initDeviceUUID();
+    if (deviceUUID == null || deviceUUID!.isEmpty) {
+      final id = _genUUIDv4();
+      await _storage.writeSecureData('deviceUUID', id);
+      deviceUUID = id;
+    }
+  }
+
+  String _genUUIDv4() {
+    const chars = '0123456789abcdef';
+    final r = Random.secure();
+    String rand(int len) => String.fromCharCodes(
+        List.generate(len, (_) => chars.codeUnitAt(r.nextInt(chars.length))));
+    final timeLow = rand(8);
+    final timeMid = rand(4);
+    final timeHiAndVersion = '4' + rand(3); // v4
+    final clkSeqHiAndReserved =
+        (8 + r.nextInt(4)).toRadixString(16) + rand(3); // variant 10xx
+    final node = rand(12);
+    return '$timeLow-$timeMid-$timeHiAndVersion-$clkSeqHiAndReserved-$node';
+  }
 
   Future<String> _getDeviceName() async {
     try {
       final deviceInfo = DeviceInfoPlugin();
       if (Platform.isAndroid) {
-        final androidInfo = await deviceInfo.androidInfo;
-        return '${androidInfo.manufacturer} ${androidInfo.model}';
+        final info = await deviceInfo.androidInfo;
+        return '${info.manufacturer} ${info.model}';
       } else if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        return '${iosInfo.name} ${iosInfo.model}';
+        final info = await deviceInfo.iosInfo;
+        return '${info.name} ${info.model}';
       } else if (Platform.isWindows) {
-        final windowsInfo = await deviceInfo.windowsInfo;
-        return 'Windows ${windowsInfo.computerName}';
+        final info = await deviceInfo.windowsInfo;
+        return 'Windows ${info.computerName}';
       } else if (Platform.isMacOS) {
-        final macInfo = await deviceInfo.macOsInfo;
-        return 'Mac ${macInfo.model}';
+        final info = await deviceInfo.macOsInfo;
+        return 'Mac ${info.model}';
       } else if (Platform.isLinux) {
-        final linuxInfo = await deviceInfo.linuxInfo;
-        return 'Linux ${linuxInfo.prettyName}';
+        final info = await deviceInfo.linuxInfo;
+        return 'Linux ${info.prettyName}';
       }
     } catch (e) {
-      if (kDebugMode) print('⚠️ _getDeviceName error: $e');
+      debugPrint('⚠️ _getDeviceName error: $e');
     }
     return 'Unknown Device';
   }
 
-  String _getPlatformName() {
-    return Platform.operatingSystem;
-  }
-
-  String _getOSVersion() {
-    return Platform.operatingSystemVersion;
-  }
+  String _getPlatformName() => Platform.operatingSystem;
+  String _getOSVersion() => Platform.operatingSystemVersion;
 
   Future<String> _getAppVersion() async {
     try {
@@ -57,145 +95,460 @@ class V1ApiManager {
     }
   }
 
+  Future<Map<String, dynamic>> getDeviceParams() async {
+    await _ensureDeviceUUID();
+    return {
+      'device_uuid': deviceUUID,
+      'device_name': await _getDeviceName(),
+      'platform': _getPlatformName(),
+      'os_version': _getOSVersion(),
+      'app_version': await _getAppVersion(),
+    };
+  }
+
+  /// refreshToken cevabı bazen {data:{token,..}} bazen {token,..} olabilir → normalize et
+  Map<String, String?> _extractTokens(dynamic refreshResult) {
+    if (refreshResult is Map) {
+      final data = refreshResult['data'];
+      if (data is Map) {
+        return {
+          'token': data['token']?.toString(),
+          'refresh': data['refresh_token']?.toString(),
+        };
+      } else {
+        return {
+          'token': refreshResult['token']?.toString(),
+          'refresh': refreshResult['refresh_token']?.toString(),
+        };
+      }
+    }
+    return {'token': null, 'refresh': null};
+  }
+
+  /// Tek bir gerçek refresh denemesi. Başarılı → true, değilse false.
+  Future<bool> _refreshOnce() async {
+    await _ensureDeviceUUID();
+
+    final refreshResult = await AuthService().refreshToken();
+    if (refreshResult == null) return false;
+
+    final toks = _extractTokens(refreshResult);
+    final newToken = toks['token'];
+    final newRefresh = toks['refresh'];
+
+    if (newToken == null || newToken.isEmpty) return false;
+
+    await _storage.writeSecureData('authToken', newToken);
+    if (newRefresh != null && newRefresh.isNotEmpty) {
+      await _storage.writeSecureData('refreshToken', newRefresh);
+    }
+    return true;
+  }
+
+  /// Aynı anda birden fazla re-auth popup açılmasını engelle
+  static Future<bool>? _reauthLock;
+
+  Future<bool> _reauthWithLock(BuildContext context) async {
+    final f = _reauthLock ??= _showReAuthDialog(context);
+    final ok = await f;
+    if (identical(_reauthLock, f)) {
+      _reauthLock = null;
+    }
+    return ok;
+  }
+
+  /// Eşzamanlı refresh çağrılarını tek future üzerinde birleştirir.
+  Future<bool> _refreshWithLock() async {
+    final f = _refreshLock ??= _refreshOnce();
+    final ok = await f;
+    if (identical(_refreshLock, f)) {
+      _refreshLock = null;
+    }
+    return ok;
+  }
+
   Future<Map<String, dynamic>> call({
     required String module,
     required String action,
     Map<String, dynamic>? params,
     bool requiresAuth = true,
+    BuildContext? context,
+    File? file,
+    String? fileType,
+    String? fileName,
+    void Function(double progress)? onProgress,
+    bool retried = false, // internal flag
   }) async {
-    final uri = Uri.parse('$baseUrl/v1/index.php');
-    String? deviceUUID = await _storage.readSecureData('deviceUUID');
-    if (deviceUUID == null || deviceUUID.isEmpty) {
-      final deviceUUID = AuthProvider.generateUUID();
-      await _storage.writeSecureData('deviceUUID', deviceUUID);
-    }
+    final dio = Dio();
+    final uri = '$baseUrl/v1/index.php';
 
-    Map<String, String> headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
+    debugPrint("🔗 API Call: $module.$action");
+    await _ensureDeviceUUID(); // refresh’ten önce de garanti
+
+    String? token;
+
     if (requiresAuth) {
-      final token = await _storage.readSecureData('authToken');
-      if (token != null && token.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $token';
-      }
-    }
-    final deviceName = await _getDeviceName();
-    final platform = _getPlatformName();
-    final osVersion = _getOSVersion();
-    final appVersion = await _getAppVersion();
-    final fullParams = {
-      ...?params,
-      'device_uuid': deviceUUID,
-      'device_name': deviceName,
-      'platform': platform,
-      'os_version': osVersion,
-      'app_version': appVersion,
-    };
-    final body = jsonEncode({
-      'module': module,
-      'action': action,
-      'params': fullParams,
-    });
-
-    if (kDebugMode) {
-      print('📤 Sending to $uri');
-      print('📨 Headers: $headers');
-      print('📨 Body: $body');
-    }
-
-    try {
-      final response = await http.post(uri, headers: headers, body: body);
-      final statusCode = response.statusCode;
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-
-      if (statusCode == 200 && decoded['success'] == true) {
-        _retryCount = 0;
-        return decoded;
+      final rawToken = await _storage.readSecureData('authToken');
+      if (rawToken == null || rawToken.isEmpty) {
+        await AuthProvider.instance.v1logout();
+        return _unauthorizedResponse('User not logged in.');
       }
 
-      if (statusCode == 401 ||
-          decoded['message']?.toString().toLowerCase().contains('token') ==
-              true) {
-        debugPrint('Returned message: ${decoded['message']}');
-        if (_retryCount < 1) {
-          _retryCount++;
-          final refreshed = await _refreshToken();
-          if (refreshed) {
-            return await call(
-                module: module,
-                action: action,
-                params: params,
-                requiresAuth: requiresAuth);
+      final rememberMe = await _storage.readSecureData('rememberMe') == 'true';
+      String? tokenCandidate = rawToken;
+
+      // Preflight: token süresi bitti/bitmek üzere → remember'ı kontrol et
+      if (_isTokenExpired(rawToken) || _isTokenExpiringSoon(rawToken)) {
+        if (rememberMe) {
+          final ok = await _refreshWithLock();
+          if (!ok) {
+            await AuthProvider.instance.v1logout();
+            V1ApiManager.onUnauthorized?.call();
+            return _unauthorizedResponse(
+                'Session expired. Please log in again.');
           }
+          tokenCandidate = await _storage.readSecureData('authToken');
         } else {
-          debugPrint('Returned message: ${decoded['message']}');
-          return {
-            'success': false,
-            'message': decoded['message'] ?? 'API error',
-            'data': decoded['data'],
-            'code': 401,
-          };
+          if (context != null) {
+            final ok = await _reauthWithLock(context);
+            if (!ok) {
+              await AuthProvider.instance.v1logout();
+              V1ApiManager.onUnauthorized?.call();
+              return _unauthorizedResponse('Session expired.');
+            }
+            tokenCandidate = await _storage.readSecureData('authToken');
+          } else {
+            await AuthProvider.instance.v1logout();
+            V1ApiManager.onUnauthorized?.call();
+            return _unauthorizedResponse('Session expired.');
+          }
         }
       }
-      debugPrint('Returned message: ${decoded['message']}');
-      return {
-        'success': false,
-        'message': decoded['message'] ?? 'API error',
-        'data': decoded['data'],
-        'code': statusCode,
-      };
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ V1ApiManager Error: $e');
+
+      if (tokenCandidate == null || tokenCandidate.isEmpty) {
+        await AuthProvider.instance.v1logout();
+        return _unauthorizedResponse('Authentication token is missing.');
       }
+
+      token = tokenCandidate;
+    }
+
+    final fullParams = {
+      ...?params,
+      ...await getDeviceParams(),
+    };
+
+    final headers = {
+      if (requiresAuth) 'Authorization': 'Bearer $token',
+    };
+
+    try {
+      Response response;
+
+      if (file != null) {
+        final formData = FormData.fromMap({
+          'module': module,
+          'action': action,
+          ...fullParams,
+          'file': await MultipartFile.fromFile(
+            file.path,
+            filename: fileName ?? file.path.split('/').last,
+            contentType: fileType != null ? MediaType.parse(fileType) : null,
+          ),
+        });
+
+        response = await dio.post(
+          uri,
+          data: formData,
+          options:
+              Options(headers: headers, contentType: 'multipart/form-data'),
+          onSendProgress: (sent, total) =>
+              onProgress?.call(total == 0 ? 0 : sent / total),
+        );
+      } else {
+        response = await dio.post(
+          uri,
+          data: {
+            'module': module,
+            'action': action,
+            'params': fullParams,
+          },
+          options: Options(
+            headers: {
+              ...headers,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          ),
+        );
+      }
+
+      final decoded = response.data;
+      return {
+        'success': decoded is Map && decoded['success'] == true,
+        'message':
+            (decoded is Map ? (decoded['message'] ?? '') : '').toString(),
+        'data': (decoded is Map ? decoded['data'] : null),
+        'code': response.statusCode,
+      };
+    } on DioException catch (e) {
+      // 401 yakala → remember'a göre davran
+      if (e.response?.statusCode == 401 && requiresAuth && !retried) {
+        final remembered =
+            (await _storage.readSecureData('rememberMe')) == 'true';
+
+        if (remembered) {
+          // remember=true → sessiz refresh + 1 kez retry
+          final ok = await _refreshWithLock();
+          if (!ok) {
+            await AuthProvider.instance.v1logout();
+            V1ApiManager.onUnauthorized?.call();
+            return _unauthorizedResponse(
+                'Session expired. Please log in again.');
+          }
+          return await call(
+            module: module,
+            action: action,
+            params: params,
+            requiresAuth: requiresAuth,
+            context: context,
+            file: file,
+            fileType: fileType,
+            fileName: fileName,
+            onProgress: onProgress,
+            retried: true,
+          );
+        } else {
+          // remember=false → şifre popup (context varsa)
+          if (context != null) {
+            final ok = await _reauthWithLock(context);
+            if (!ok) {
+              await AuthProvider.instance.v1logout();
+              V1ApiManager.onUnauthorized?.call();
+              return _unauthorizedResponse('Session expired.');
+            }
+            return await call(
+              module: module,
+              action: action,
+              params: params,
+              requiresAuth: requiresAuth,
+              context: context,
+              file: file,
+              fileType: fileType,
+              fileName: fileName,
+              onProgress: onProgress,
+              retried: true,
+            );
+          } else {
+            await AuthProvider.instance.v1logout();
+            V1ApiManager.onUnauthorized?.call();
+            return _unauthorizedResponse('Session expired.');
+          }
+        }
+      }
+
+      final resData = e.response?.data;
+      final msg = (resData is Map && resData['message'] != null)
+          ? resData['message'].toString()
+          : 'Connection error: ${e.message}';
+
       return {
         'success': false,
-        'message': 'Connection error',
+        'message': msg,
         'data': null,
+        'code': e.response?.statusCode,
       };
     }
   }
 
-  Future<bool> _refreshToken() async {
-    final refreshToken = await _storage.readSecureData('refreshToken');
-    final deviceUuid = await _storage.readSecureData('deviceUUID');
-    if (refreshToken == null || refreshToken.isEmpty) return false;
-
-    try {
-      final uri = Uri.parse('$baseUrl/v1/index.php');
-      final headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
+  Map<String, dynamic> _unauthorizedResponse(String message) => {
+        'success': false,
+        'message': message,
+        'code': 401,
+        'data': null,
       };
 
-      final body = jsonEncode({
-        'module': 'auth',
-        'action': 'refresh_token',
-        'params': {
-          'refresh_token': refreshToken,
-          'device_uuid': deviceUuid,
-        }
-      });
+  bool _isTokenExpired(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return true;
 
-      final response = await http.post(uri, headers: headers, body: body);
-      final statusCode = response.statusCode;
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      final payload =
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final payloadMap = json.decode(payload);
+      final exp = payloadMap['exp'];
 
-      if (kDebugMode) {
-        print('🔁 Refresh Response [$statusCode]: $decoded');
-      }
+      if (exp == null) return true;
 
-      if (statusCode == 200 && decoded['success'] == true) {
-        await _storage.writeSecureData('authToken', decoded['data']['token']);
-        await _storage.writeSecureData(
-            'refreshToken', decoded['data']['refresh_token']);
-        return true;
-      }
-    } catch (e) {
-      if (kDebugMode) print('❌ Refresh Token Error: $e');
+      final expiryDate = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
+      return DateTime.now().isAfter(expiryDate);
+    } catch (_) {
+      return true;
     }
+  }
 
-    return false;
+  bool _isTokenExpiringSoon(String token, {int bufferInSeconds = 90}) {
+    if (debugForceExpiringSoon) return true;
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return true;
+
+      final payload =
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final Map<String, dynamic> decoded = json.decode(payload);
+      final int exp = decoded['exp'] ?? 0;
+
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      return (exp - now) <= bufferInSeconds;
+    } catch (e) {
+      debugPrint("❌ Token expiration kontrolü başarısız: $e");
+      return true;
+    }
+  }
+
+  // ——— Moderation convenience ———
+
+  Future<Map<String, dynamic>> moderationBlockUser({
+    required int targetUserId,
+    String? until, // 'YYYY-MM-DD HH:mm:ss'
+    int? durationHours, // alternatif
+    String? reason,
+  }) async {
+    return await call(
+      module: 'moderation',
+      action: 'blockUser',
+      params: {
+        'target_user_id': targetUserId,
+        if (until != null) 'until': until,
+        if (durationHours != null) 'duration_hours': durationHours,
+        if (reason != null) 'reason': reason,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> moderationUnblockUser({
+    required int targetUserId,
+  }) async {
+    return await call(
+      module: 'moderation',
+      action: 'unblockUser',
+      params: {'target_user_id': targetUserId},
+    );
+  }
+
+  Future<Map<String, dynamic>> moderationGetBlockStatus({
+    required int targetUserId,
+  }) async {
+    return await call(
+      module: 'moderation',
+      action: 'getBlockStatus',
+      params: {'target_user_id': targetUserId},
+    );
+  }
+
+  Future<bool> _showReAuthDialog(BuildContext context) async {
+    final email = await _storage.readSecureData('email') ?? '';
+    String password = '';
+    bool loading = false;
+    String? error;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setState) {
+          return AlertDialog(
+            title: const Text('Session expired'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Please re-enter your password to continue.'),
+                const SizedBox(height: 8),
+                TextFormField(
+                  initialValue: email,
+                  readOnly: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  obscureText: true,
+                  onChanged: (v) => password = v,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(error!, style: const TextStyle(color: Colors.red)),
+                ],
+                if (loading) ...[
+                  const SizedBox(height: 12),
+                  const CircularProgressIndicator(),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (password.trim().isEmpty) {
+                    if (!ctx.mounted) return;
+                    setState(() => error = 'Please enter your password.');
+                    return;
+                  }
+                  if (!ctx.mounted) return;
+                  setState(() {
+                    loading = true;
+                    error = null;
+                  });
+
+                  try {
+                    final auth = AuthService();
+                    final res =
+                        await auth.login(email, password, rememberMe: false);
+                    final success =
+                        (res['success'] == true) && (res['token'] != null);
+
+                    if (success) {
+                      await _storage.writeSecureData(
+                          'authToken', (res['token'] ?? '').toString());
+                      if (res['refresh_token'] != null) {
+                        await _storage.writeSecureData('refreshToken',
+                            (res['refresh_token'] ?? '').toString());
+                      }
+                      await _storage.writeSecureData('rememberMe', 'false');
+
+                      if (ctx.mounted) Navigator.pop(ctx, true);
+                      // ÖNEMLİ: Erken dön → finally’de setState çalışmasın
+                      return;
+                    } else {
+                      if (!ctx.mounted) return;
+                      setState(() => error =
+                          (res['message'] ?? 'Login failed').toString());
+                    }
+                  } catch (e) {
+                    if (!ctx.mounted) return;
+                    setState(() => error = 'Login error: $e');
+                  } finally {
+                    if (!ctx.mounted) return;
+                    setState(() => loading = false);
+                  }
+                },
+                child: const Text('Continue'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+
+    return ok == true;
   }
 }

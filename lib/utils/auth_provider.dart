@@ -1,3 +1,4 @@
+// lib/utils/auth_provider.dart
 // ignore_for_file: use_build_context_synchronously
 
 import 'dart:convert';
@@ -9,76 +10,62 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/services/v1/auth_service.dart';
 import 'package:seaofsea/services/v1/v1_api_manager.dart';
+import 'package:seaofsea/utils/permission_provider.dart';
 import 'package:seaofsea/utils/role_provider.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
 
 class AuthProvider with ChangeNotifier {
+  // Singleton
+  static final AuthProvider _singleton = AuthProvider._internal();
+  factory AuthProvider() => _singleton;
+  AuthProvider._internal();
+  static AuthProvider get instance => _singleton;
+
+  // State
   String? _authToken;
-  // ignore: unused_field
-  String? _role;
   Map<String, dynamic>? _userInfo;
-  // ignore: unused_field
   bool _isLoadingData = false;
 
+  // Expose
   String? get token => _authToken;
-  bool get isLoggedIn => _authToken != null;
-  //bool get isLoadingData => _isLoadinData;
+  bool get isLoggedIn => _authToken != null && _authToken!.isNotEmpty;
   Map<String, dynamic>? get userInfo => _userInfo;
+  bool get isLoading => _isLoadingData;
 
-  AuthProvider() {
-    //_loadUserFromPreferences(); // LoadFromStorage() olarak değiştir.
-    _loadUserFromStorage();
-  }
-
+  // Role adı (hem role_id hem role alanlarını destekle)
   String getRole(BuildContext context) {
-    final roleProvider = Provider.of<RoleProvider>(context, listen: false);
-    final int roleId =
-        int.tryParse(_userInfo?['role_id']?.toString() ?? '3') ?? 3;
+    final roleProvider = RoleProvider.of(context, listen: false);
+    final raw = _userInfo?['role_id'] ?? _userInfo?['role'] ?? 3;
+    final int roleId = int.tryParse(raw.toString()) ?? 3;
     return roleProvider.getRoleNameById(roleId);
   }
 
-  Future<String> v1saveDeviceUUID() async {
+  // ======== DEVICE UUID: TEK NOKTA ========
+  static const _deviceUUIDKey = 'deviceUUID';
+
+  Future<String> getOrCreateDeviceUUID() async {
     final storage = SecureStorage();
-    String? deviceUUID = await storage.readSecureData('deviceUUID');
-
-    if (deviceUUID == null || deviceUUID.isEmpty) {
-      deviceUUID = _generateUUID();
-      await storage.writeSecureData('deviceUUID', deviceUUID);
-    }
-    return deviceUUID;
+    String? id = await storage.readSecureData(_deviceUUIDKey);
+    if (id != null && id.isNotEmpty) return id;
+    final newId = _generateDeviceUUIDHex();
+    await storage.writeSecureData(_deviceUUIDKey, newId);
+    return newId;
   }
 
-  String _generateUUID() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final random = Random();
-    return List.generate(36, (index) {
-      if ([8, 13, 18, 23].contains(index)) return '-';
-      return chars[random.nextInt(chars.length)];
-    }).join();
+  static String _generateDeviceUUIDHex() {
+    const chars = '0123456789abcdef';
+    final r = Random.secure();
+    String rand(int len) =>
+        String.fromCharCodes(List.generate(len, (_) => chars.codeUnitAt(r.nextInt(chars.length))));
+    final timeLow = rand(8);
+    final timeMid = rand(4);
+    final timeHiAndVersion = '4' + rand(3); // v4
+    final clkSeqHiAndReserved = (8 + r.nextInt(4)).toRadixString(16) + rand(3); // variant 10xx
+    final node = rand(12);
+    return '$timeLow-$timeMid-$timeHiAndVersion-$clkSeqHiAndReserved-$node';
   }
 
-  static String generateUUID() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final random = Random();
-    return List.generate(36, (index) {
-      if (index == 8 || index == 13 || index == 18 || index == 23) {
-        return '-'; // UUID formatına uygun tireler
-      }
-      return chars[random.nextInt(chars.length)];
-    }).join();
-  }
-
-  Future<String> saveDeviceUUID() async {
-    final storage = SecureStorage();
-    String? deviceUUID = await storage.readSecureData('deviceUUID');
-
-    if (deviceUUID == null || deviceUUID.isEmpty) {
-      deviceUUID = generateUUID();
-      await storage.writeSecureData('deviceUUID', deviceUUID);
-    }
-    return deviceUUID;
-  }
-
+  // Opsiyonel: cihaz adı/platform
   static Future<String> getDeviceName() async {
     final deviceInfo = DeviceInfoPlugin();
     if (Platform.isAndroid) {
@@ -92,11 +79,9 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // Platform (android, ios, windows, macos, web)
-  static Future<String> getPlatformName() async {
-    return Platform.operatingSystem; // 'android', 'ios', 'windows' vs.
-  }
+  static Future<String> getPlatformName() async => Platform.operatingSystem;
 
+  // ======== LOGIN ========
   Future<bool> v1login(
     BuildContext context,
     String email,
@@ -117,8 +102,16 @@ class AuthProvider with ChangeNotifier {
       _isLoadingData = false;
 
       if (result['success'] == true) {
-        _authToken = result['token'];
-        _userInfo = result['user'];
+        // Token & rememberMe & refreshToken storage'a AuthService.login içinde yazıldı.
+        _authToken = (result['token'] ?? '').toString();
+        _userInfo = (result['user'] as Map<String, dynamic>?) ?? {};
+        await _persistUserInfo(_userInfo);
+
+        // İzinleri çek
+        try {
+          await PermissionProvider.maybeOf(context)?.fetchUserPermissions();
+        } catch (_) {}
+
         notifyListeners();
         return true;
       } else {
@@ -132,9 +125,7 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       _isLoadingData = false;
       notifyListeners();
-
       debugPrint('❌ AuthProvider.v1login() error: $e');
-
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Server error: $e')),
@@ -144,6 +135,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  // ======== REGISTER ========
   Future<bool> v1Register({
     required BuildContext context,
     required String name,
@@ -166,8 +158,10 @@ class AuthProvider with ChangeNotifier {
       _isLoadingData = false;
 
       if (result['success'] == true) {
-        _authToken = result['token'];
-        _userInfo = result['user'];
+        final data = (result['data'] as Map<String, dynamic>?) ?? {};
+        _authToken = data['token']?.toString();
+        _userInfo = (data['user'] as Map<String, dynamic>?) ?? {};
+        await _persistUserInfo(_userInfo);
         notifyListeners();
         return true;
       } else {
@@ -191,33 +185,74 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  // ======== AUTO LOGIN ========
   Future<bool> tryAutoLogin(BuildContext context) async {
     final storage = SecureStorage();
     final token = await storage.readSecureData('authToken');
-    final isAnonymous =
-        await storage.readSecureData('isAnonymous'); // eklenen satır
+    final rememberMe = (await storage.readSecureData('rememberMe')) == 'true';
+    final refreshTok = await storage.readSecureData('refreshToken');
 
-    if (token != null && token.isNotEmpty) {
-      final isValid = await v1validateToken(context);
-
-      if (isValid) {
-        _authToken = token;
-        _userInfo = _decodeToken(token);
-        notifyListeners();
-
-        if (isAnonymous == 'true') {
-          debugPrint('🔐 Anonymous auto login success');
-        } else {
-          debugPrint('🔐 Regular auto login success');
-        }
-
-        return true;
-      }
+    if (token == null || token.isEmpty) {
+      debugPrint("❌ No token in storage → auto login skipped.");
+      return false;
     }
 
-    return false;
+    // Eğer remember=true ama refresh_token yoksa, bu bir tutarsızlık demektir.
+    // Sonsuz refresh denemelerini engellemek için bayrağı düzeltelim.
+    if (rememberMe && (refreshTok == null || refreshTok.isEmpty)) {
+      debugPrint('⚠️ rememberMe=true ancak refresh_token yok. Bayrak sıfırlanıyor.');
+      await storage.writeSecureData('rememberMe', 'false');
+    }
+
+    String workingToken = token;
+
+    // Süresi dolmuş/bitmek üzere ise sessiz refresh dene
+    if (_isJwtExpired(workingToken) || _isJwtExpiringSoon(workingToken)) {
+      final remembered = (await storage.readSecureData('rememberMe')) == 'true';
+      if (!remembered) {
+        debugPrint("⏳ Token expired & not remembered → soft logout.");
+        await v1logout(clearRemember: false); // soft
+        return false;
+      }
+
+      try {
+        final refreshed = await AuthService().refreshToken();
+        if (refreshed == null || refreshed['token'] == null) {
+          debugPrint("❌ Refresh failed.");
+          await v1logout(clearRemember: false); // soft
+          return false;
+        }
+        workingToken = refreshed['token'] as String;
+        _authToken = workingToken; // storage yazımı refreshToken içinde zaten yapıldı
+      } catch (e) {
+        debugPrint("❌ Refresh exception: $e");
+        await v1logout(clearRemember: false); // soft
+        return false;
+      }
+    } else {
+      _authToken = workingToken;
+    }
+
+    // Her durumda kullanıcı profilini backend'den çek → güncel veri
+    try {
+      await refreshUserInfo(context);
+    } catch (e) {
+      debugPrint("⚠️ refreshUserInfo failed: $e");
+      // profil çekilemese bile token elimizde → true dönebiliriz
+    }
+
+    // İzinleri sessizce güncelle (varsa)
+    try {
+      final perm = PermissionProvider.maybeOf(context, listen: false);
+      await perm?.fetchUserPermissions();
+    } catch (_) {}
+
+    notifyListeners();
+    debugPrint("✅ Auto login ready.");
+    return true;
   }
 
+  // ======== ANON LOGIN ========
   Future<bool> v1anonymousLogin(BuildContext context) async {
     try {
       _isLoadingData = true;
@@ -229,16 +264,15 @@ class AuthProvider with ChangeNotifier {
       _isLoadingData = false;
 
       if (result['success'] == true) {
-        _authToken = result['token'];
-        _userInfo = result['user'];
+        _authToken = result['token']?.toString();
+        _userInfo = (result['user'] as Map<String, dynamic>?) ?? {};
+        await _persistUserInfo(_userInfo);
         notifyListeners();
         return true;
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message'] ?? 'Anonymous login failed'),
-            ),
+            SnackBar(content: Text(result['message'] ?? 'Anonymous login failed')),
           );
         }
         return false;
@@ -246,9 +280,7 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       _isLoadingData = false;
       notifyListeners();
-
       debugPrint('❌ AuthProvider.v1anonymousLogin() error: $e');
-
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Server error: $e')),
@@ -258,87 +290,75 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<void> _loadUserFromStorage() async {
+  // Storage’tan sadece tokenı yüklemek istersen
+  Future<void> loadFromStorage() async {
     final storage = SecureStorage();
     final storedToken = await storage.readSecureData('authToken');
-
-    if (storedToken != null) {
+    if (storedToken != null && storedToken.isNotEmpty) {
       _authToken = storedToken;
-      // opsiyonel: userInfo fetch edilebilir
+      notifyListeners();
     }
-
-    notifyListeners();
   }
 
-  Future<void> v1logout({bool allDevices = false}) async {
+  // ======== LOGOUT ========
+  /// clearRemember:
+  ///  - false → soft logout (otomatik zaman aşımı gibi durumlar). rememberMe bayrağını KORUR.
+  ///  - true  → hard logout (kullanıcı menüden çıkış). rememberMe dahil her şeyi temizler.
+  Future<void> v1logout({bool allDevices = false, bool clearRemember = false}) async {
     final authService = AuthService();
-    await authService.logout(
-        includeDeviceUUID: allDevices, allDevices: allDevices);
+    await authService.logout(includeDeviceUUID: !allDevices, allDevices: allDevices);
+
+    final s = SecureStorage();
+    await s.deleteSecureData('authToken');
+    await s.deleteSecureData('refreshToken');
+    await s.deleteSecureData('role');
+    await s.deleteSecureData('userId');
+    if (clearRemember) {
+      await s.deleteSecureData('rememberMe');
+      await s.deleteSecureData('isAnonymous');
+    }
+    // deviceUUID'yi genelde tutarız.
+
     _authToken = null;
     _userInfo = null;
     notifyListeners();
   }
 
-  Future<void> validateToken(BuildContext context) async {
-    final storage = SecureStorage();
-    final refreshToken = await storage.readSecureData('refreshToken');
-    if (refreshToken == null) {
-      await v1logout();
-      return;
-    }
+  // ======== TOKEN DOĞRULAMA / YENİLEME ========
+  Future<bool> v1validateToken() async {
     try {
-      final apiManager = Provider.of<V1ApiManager>(context, listen: false);
-      final isValid = await apiManager.call(
-        module: 'auth',
-        action: 'validate_token',
-        params: {'token': token}, // veya refresh_token değil token
-      );
-
-      if (!isValid['success']) {
-        await v1logout();
-      } else {
-        debugPrint('Token is valid.');
-      }
-    } catch (e) {
-      debugPrint('Error during token validation: $e');
-      if (context.mounted) {
-        if (ScaffoldMessenger.maybeOf(context) != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Token validation failed')),
-          );
-        }
-        await v1logout(); // Herhangi bir hata durumunda logout yap
-      }
-    }
-  }
-
-  Future<bool> v1validateToken(BuildContext context) async {
-    final storage = SecureStorage();
-    final refreshToken = await storage.readSecureData('refreshToken');
-
-    if (refreshToken == null) return false;
-    try {
-      final apiManager = Provider.of<V1ApiManager>(context, listen: false);
-      final response = await apiManager.call(
-        module: 'auth',
-        action: 'validate',
-        params: {'refresh_token': refreshToken},
-      );
-
-      return response['success'] == true;
+      final authService = AuthService();
+      return await authService.validateToken();
     } catch (e) {
       debugPrint('❌ validateToken error: $e');
       return false;
     }
   }
 
+  Future<bool> attemptTokenRefresh() async {
+    try {
+      final authService = AuthService();
+      final refreshed = await authService.refreshToken();
+      if (refreshed != null && refreshed['token'] != null && refreshed['refresh_token'] != null) {
+        _authToken = refreshed['token']?.toString();
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('❌ attemptTokenRefresh error: $e');
+      return false;
+    }
+  }
+
+  // ======== USER INFO ========
   Map<String, dynamic>? _decodeToken(String token) {
     try {
-      final payload = utf8
-          .decode(base64Url.decode(base64Url.normalize(token.split('.')[1])));
+      if (token.isEmpty) return null;
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      final payload = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
       final Map<String, dynamic> data = jsonDecode(payload);
-      debugPrint("✅ Token decode edildi: $data");
-      // Burada doğrudan 'data' değil 'user' olabilir.
       return data['user'] ?? data;
     } catch (e) {
       debugPrint('Error decoding token: $e');
@@ -347,33 +367,66 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> refreshUserInfo(BuildContext context) async {
-    final apiManager = Provider.of<V1ApiManager>(context, listen: false);
-    try {
-      final response = await apiManager.call(
-        module: 'auth',
-        action: 'get_user_info',
-        params: {},
-      );
-      if (response['success'] == true) {
-        _userInfo = response['data'];
-        final secureStorage = SecureStorage();
-        await secureStorage.writeSecureData('userId', _userInfo?['id']);
-        await secureStorage.writeSecureData('email', _userInfo?['email']);
-        await secureStorage.writeSecureData('name', _userInfo?['name']);
-        await secureStorage.writeSecureData('surname', _userInfo?['surname']);
-        await secureStorage.writeSecureData(
-            'coverImage', _userInfo?['cover_image']);
-        await secureStorage.writeSecureData(
-            'user_image', _userInfo?['user_image']);
-        notifyListeners();
+    final v1 = Provider.of<V1ApiManager>(context, listen: false);
 
-        debugPrint('✅ User info refreshed successfully: $_userInfo');
-      } else {
-        throw Exception(response['message']);
-      }
-    } catch (e) {
-      debugPrint('⚠️ Error refreshing user info: $e');
+    // 'profile/getProfile' (id vermeden = kendi profili)
+    final resp = await v1.call(
+      module: 'profile',
+      action: 'getProfile',
+      params: {},
+      requiresAuth: true,
+      context: context,
+    );
+
+    if (resp['success'] == true && resp['data'] != null) {
+      _userInfo = Map<String, dynamic>.from(resp['data'] as Map);
+      await _persistUserInfo(_userInfo);
+    } else {
+      throw Exception(resp['message'] ?? 'Failed to fetch profile');
     }
+  }
+
+  bool _isJwtExpired(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return true;
+      final payload = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final exp = (jsonDecode(payload)['exp'] as int?);
+      if (exp == null) return true;
+      return DateTime.now().isAfter(DateTime.fromMillisecondsSinceEpoch(exp * 1000));
+    } catch (_) {
+      return true;
+    }
+  }
+
+  bool _isJwtExpiringSoon(String token, {int bufferSeconds = 90}) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return true;
+      final payload = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+      final exp = (jsonDecode(payload)['exp'] as int?) ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      return (exp - now) <= bufferSeconds;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // ======== NULL-SAFE storage persist helper ========
+  Future<void> _persistUserInfo(Map<String, dynamic>? user) async {
+    final s = SecureStorage();
+
+    Future<void> w(String key, dynamic v) async {
+      if (v == null) return;
+      await s.writeSecureData(key, v.toString());
+    }
+
+    await w('userId', user?['id']);
+    await w('email', user?['email']);
+    await w('name', user?['name']);
+    await w('surname', user?['surname']);
+    await w('coverImage', user?['cover_image']);
+    await w('user_image', user?['user_image']);
   }
 }
 

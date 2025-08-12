@@ -1,8 +1,11 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
+import 'package:seaofsea/utils/permission_provider.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';
 import 'package:seaofsea/widgets/custom_image_picker.dart';
@@ -34,8 +37,11 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
   }
 
   Future<void> fetchUserData() async {
-    final apiManager = Provider.of<ApiManager>(context, listen: false);
-    final response = await apiManager.get(context, 'get_user_info');
+    final apiManager = Provider.of<V1ApiManager>(context, listen: false);
+    final response = await apiManager.call(
+      module: 'profile',
+      action: 'getProfile',
+    );
     if (response['success'] == true) {
       if (mounted) {
         setState(() {
@@ -55,18 +61,22 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
 
   Future<void> updateUserData() async {
     setState(() => isUpdating = true);
-    final apiManager = Provider.of<ApiManager>(context, listen: false);
-    final response = await apiManager.post(context, 'update_user', {
-      'user_id': infoData['id'],
-      'name': _nameController.text,
-      'surname': _surnameController.text,
-      'email': _emailController.text,
-      'dob': _dobController.text,
-      'pob': _pobController.text,
-      'gender': _genderController.text,
-      'maritalStatus': _msController.text,
-      'bio': _bioController.text,
-    });
+    final apiManager = Provider.of<V1ApiManager>(context, listen: false);
+    final response = await apiManager.call(
+      module: 'profile',
+      action: 'updateProfile',
+      params: {
+        'user_id': infoData['id'],
+        'name': _nameController.text,
+        'surname': _surnameController.text,
+        'email': _emailController.text,
+        'dob': _dobController.text,
+        'pob': _pobController.text,
+        'gender': _genderController.text,
+        'maritalStatus': _msController.text,
+        'bio': _bioController.text,
+      },
+    );
     debugPrint('User all data: $response');
     setState(() => isUpdating = false);
     if (response['success'] == true) {
@@ -80,36 +90,60 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
   }
 
   void _onImagePicked(File? file, String? base64, String type) async {
-    final apiManager = Provider.of<ApiManager>(context, listen: false);
-    final userId = infoData['id'];
-    if (file != null && userId != null) {
-      await apiManager.uploadImage(
-        context,
-        endpoint: 'upload_image',
-        file: file,
-        meta: {'type': type, 'user_id': userId.toString()},
-      );
-      await fetchUserData();
+    if (file == null) return;
+
+    final apiManager = Provider.of<V1ApiManager>(context, listen: false);
+
+    final response = await apiManager.call(
+      module: 'upload',
+      action: 'upload_image',
+      file: file,
+      fileType:
+          'image/png', // veya image/jpeg (kullanıcının seçimine göre de yapılabilir)
+      params: {
+        'type': type, // "user" veya "cover"
+      },
+    );
+
+    if (response['success'] == true) {
+      await fetchUserData(); // yeni resimle verileri tekrar al
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Image uploaded successfully!')),
+        );
+      }
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(response['message'] ?? 'Upload failed')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final apiManager = Provider.of<ApiManager>(context, listen: false);
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final apiManager = Provider.of<V1ApiManager>(context, listen: false);
+
+    final canUpdateOwn = context
+        .select<PermissionProvider, bool>((p) => p.can('user.update_own'));
+    final bool isVerified =
+        (infoData['emailVerified'] == true) || (infoData['emailVerified'] == 1);
 
     final String coverImageUrl = infoData['cover_image'] != null
-        ? "${apiManager.baseUrl}/images/user/covers/${infoData['cover_image']}"
+        ? "${apiManager.baseUrl}/uploads/user/covers/${infoData['cover_image']}"
         : "assets/cover.jpg";
 
     final String userImageUrl = infoData['user_image'] != null
-        ? "${apiManager.baseUrl}/images/user/user/${infoData['user_image']}"
+        ? "${apiManager.baseUrl}/uploads/user/user/${infoData['user_image']}"
         : "assets/sailorHat.png";
 
     return SingleChildScrollView(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
+          if (!isVerified) const _VerifyBanner(),
           Stack(
             alignment: Alignment.bottomCenter,
             children: [
@@ -123,20 +157,8 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
                       meta: const {'type': 'cover'},
                       onImagePicked: (file, base64) =>
                           _onImagePicked(file, base64, 'cover'),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withAlpha((0.8 * 255).round()),
-                          ],
-                        ),
-                      ),
+                      deleteOld: true,
+                      addWatermark: true,
                     ),
                   ),
                 ],
@@ -167,6 +189,9 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
                     iwidth: 100,
                     iheight: 100,
                     iradius: 50,
+                    deleteOld: true,
+                    addWatermark: true,
+                    ishadow: true,
                   ),
                 ),
               ),
@@ -285,6 +310,39 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VerifyBanner extends StatelessWidget {
+  const _VerifyBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.shade300),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text('Please verify your email to update your profile.'),
+          ),
+          TextButton(
+            onPressed: () {
+              // Buraya e-posta doğrulama akışını bağlayabilirsin
+            },
+            child: const Text('Verify'),
           ),
         ],
       ),

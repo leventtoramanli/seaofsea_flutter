@@ -851,6 +851,8 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
           aspectRatio: 1,
           existingImageUrl: imageUrl,
           meta: {'type': 'company'},
+          addWatermark: true,
+          deleteOld: true,
           iwidth: 80,
           iheight: 80,
           iradius: 40,

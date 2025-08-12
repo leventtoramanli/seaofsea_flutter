@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:seaofsea/main.dart';
+import 'package:seaofsea/pages/permission_debug_page.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/views/admin_dashboard.dart';
 import 'package:seaofsea/views/auth/auth_page.dart';
@@ -30,17 +30,30 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
           builder: (context) => const AuthPage(mode: AuthMode.register));
     case '/home':
       return MaterialPageRoute(builder: (context) => const HomePage());
+    // routes.dart (veya onGenerateRoute içinde)
     case '/admin':
-      return MaterialPageRoute(builder: (context) => const AdminDashboard());
+      return MaterialPageRoute(builder: (_) => const AdminDashboard());
+
     case '/settings':
       return MaterialPageRoute(
           builder: (context) => SettingsPage(arguments: settings.arguments));
     case '/public_profile_page':
-      return MaterialPageRoute(
-          builder: (context) => PublicProfilePage(
-                userId: Provider.of<AuthProvider>(context, listen: false)
-                    .userInfo?['id'],
-              ));
+      {
+        final args = settings.arguments as Map<String, dynamic>?;
+
+        // Öncelik: arguments.user_id, yoksa oturumdaki kullanıcı
+        final dynamic rawId =
+            args?['user_id'] ?? AuthProvider.instance.userInfo?['id'];
+
+        // Güvenli int’e çevir (null olabilir)
+        final int? userId =
+            (rawId is int) ? rawId : int.tryParse(rawId?.toString() ?? '');
+
+        return MaterialPageRoute(
+          builder: (_) => PublicProfilePage(userId: userId),
+        );
+      }
+
     case '/manage_company':
       return MaterialPageRoute(builder: (context) => const ManageCompanyPage());
     case '/create_company':
@@ -88,6 +101,11 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
       final int? companyId = args?['company_id'];
       return MaterialPageRoute(
         builder: (context) => CompanyUsersPage(companyId: companyId ?? 0),
+      );
+    case '/perm_debug':
+      return MaterialPageRoute(
+        builder: (context) => const PermissionDebugPage(),
+        settings: settings,
       );
 
     default:

@@ -3,12 +3,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:image_picker/image_picker.dart';
 import 'package:crop_image/crop_image.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 
 class CustomImagePicker extends StatefulWidget {
@@ -22,6 +21,8 @@ class CustomImagePicker extends StatefulWidget {
   final String? existingImageUrl;
   final bool canEdit;
   final bool doUpload;
+  final bool deleteOld;
+  final bool addWatermark;
   final String? uploadEndpoint;
   final Map<String, String>? uploadMeta;
   final void Function(String fileName)? onUploaded;
@@ -31,6 +32,8 @@ class CustomImagePicker extends StatefulWidget {
     required this.aspectRatio,
     required this.onImagePicked,
     required this.meta,
+    required this.deleteOld,
+    required this.addWatermark,
     this.iwidth = 0.0,
     this.iheight = 0.0,
     this.iradius = 0.0,
@@ -133,7 +136,6 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
                               if (byteData != null) {
                                 final croppedBytes =
                                     byteData.buffer.asUint8List();
-
                                 if (!kIsWeb) {
                                   // Mobil platformda dosya kaydı
                                   final tempDir = Directory.systemTemp;
@@ -144,35 +146,43 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
                                   setState(() {
                                     _selectedImage = file;
                                   });
-                                  widget.onImagePicked(file, null);
-                                  if (widget.doUpload &&
-                                      widget.uploadEndpoint != null) {
-                                    final api = Provider.of<ApiManager>(context,
-                                        listen: false);
-                                    final response = await api.uploadImage(
-                                      context,
-                                      endpoint: widget.uploadEndpoint!,
-                                      file: file,
-                                      meta: widget.uploadMeta ?? {},
-                                    );
-                                    final fileName =
-                                        response?['data']?['file_name'];
-                                    if (fileName != null) {
-                                      widget.onUploaded?.call(fileName);
+                                  debugPrint(
+                                      "📸 User found: ${userId.toString()}");
+                                  final v1api = V1ApiManager();
+                                  final uploadResponse = await v1api.call(
+                                    module: 'user',
+                                    action: 'upload_image',
+                                    file: file,
+                                    fileType: 'image/png',
+                                    fileName: 'user_${userId}_profile.png',
+                                    params: {
+                                      'type': 'user',
+                                      'user_id': userId.toString(),
+                                      'deleteOld': widget.deleteOld.toString(),
+                                      'addWatermark':
+                                          widget.addWatermark.toString(),
+                                    },
+                                    onProgress: (progress) {
+                                      dialogSetState(() {
+                                        // yükleme animasyonunu göster
+                                      });
+                                    },
+                                  );
+
+                                  if (uploadResponse['success'] == true) {
+                                    if (widget.onUploaded != null) {
+                                      widget.onUploaded!(
+                                          uploadResponse['data']['file_name']);
                                     }
                                   } else {
-                                    widget.onImagePicked(
-                                        file, null); // eski sistem hâlâ aktif
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                          content: Text(
+                                              "Upload failed: ${uploadResponse['message']}")),
+                                    );
                                   }
-                                } else {
-                                  // Web platformunda base64 formatına dönüştürme
-                                  final base64Image =
-                                      base64Encode(croppedBytes);
 
-                                  setState(() {
-                                    _selectedImageBytes = croppedBytes;
-                                  });
-                                  widget.onImagePicked(null, base64Image);
+                                  widget.onImagePicked(file, null);
                                 }
 
                                 dialogSetState(() {
@@ -272,10 +282,13 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
                   color: Colors.black.withAlpha(60),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.add_a_photo,
-                  color: Colors.white,
-                  size: 24,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: const Icon(
+                    Icons.add_a_photo,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                 ),
               ),
             ),

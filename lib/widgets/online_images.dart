@@ -10,6 +10,7 @@ class OnlineImage extends StatelessWidget {
   final bool rounded;
   final bool border;
   final BoxBorder? borderSpecs;
+  final String? fallbackAsset;
 
   const OnlineImage({
     super.key,
@@ -20,11 +21,13 @@ class OnlineImage extends StatelessWidget {
     this.rounded = false,
     this.border = false,
     this.borderSpecs,
+    this.fallbackAsset,
   });
 
   String buildImageUrl(String baseUrl, String imagePath) {
     final cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
-    final cleanPath = imagePath.startsWith('/') ? imagePath.substring(1) : imagePath;
+    final cleanPath =
+        imagePath.startsWith('/') ? imagePath.substring(1) : imagePath;
     return '$cleanBaseUrl$cleanPath';
   }
 
@@ -33,20 +36,50 @@ class OnlineImage extends StatelessWidget {
     final api = context.read<ApiManager>();
     final double finalSizeH = sizeH ?? sizeW;
 
+    // fallback durum kontrolü
+    if (imageName.isEmpty || imageName == 'null') {
+      return Container(
+        width: sizeW,
+        height: finalSizeH,
+        decoration: BoxDecoration(
+          border: border
+              ? (borderSpecs ??
+                  Border.all(color: Theme.of(context).dividerColor))
+              : null,
+          shape: rounded ? BoxShape.circle : BoxShape.rectangle,
+        ),
+        child: fallbackAsset != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(rounded ? sizeW / 2 : 0),
+                child: Image.asset(
+                  fallbackAsset!,
+                  width: sizeW,
+                  height: finalSizeH,
+                  fit: BoxFit.cover,
+                ),
+              )
+            : const Icon(Icons.image_not_supported,
+                size: 24, color: Colors.grey),
+      );
+    }
+
     final imageUrl = buildImageUrl(api.baseUrl, '$imagePath$imageName');
-debugPrint('Image URL: $imageUrl');
+
     Widget image = Image.network(
       imageUrl,
       width: sizeW,
       height: finalSizeH,
       fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) {
-        return Container(
-          width: sizeW,
-          height: finalSizeH,
-          color: Colors.grey[200],
-          child: const Icon(Icons.image_not_supported, size: 24, color: Colors.grey),
-        );
+        return fallbackAsset != null
+            ? Image.asset(
+                fallbackAsset!,
+                width: sizeW,
+                height: finalSizeH,
+                fit: BoxFit.cover,
+              )
+            : const Icon(Icons.image_not_supported,
+                size: 24, color: Colors.grey);
       },
     );
 

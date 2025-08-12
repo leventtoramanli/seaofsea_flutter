@@ -49,13 +49,15 @@ class CustomScaffold extends StatelessWidget {
         ),
         actions: [
           if (wideScreen)
-            ...menuProvider.getMenuItems(context).map((item) {
+            ...menuProvider.getVisibleMenuItems(context).map((item) {
               if (tWideScreen) {
                 return Row(
                   children: [
                     TextButton.icon(
-                      onPressed: () => item.onTap!(context), // ✅ Hata düzeltildi
-                      icon: Icon(item.icon, color: Colors.white), // ✅ Map kaldırıldı
+                      onPressed: () =>
+                          item.onTap!(context), // ✅ Hata düzeltildi
+                      icon: Icon(item.icon,
+                          color: Colors.white), // ✅ Map kaldırıldı
                       label: Text(
                         item.label, // ✅ Map kaldırıldı
                         style: const TextStyle(color: Colors.white),
@@ -79,7 +81,7 @@ class CustomScaffold extends StatelessWidget {
                   onPressed: () => item.onTap!(context), // ✅ Hata düzeltildi
                 );
               }
-            // ignore: unnecessary_to_list_in_spreads
+              // ignore: unnecessary_to_list_in_spreads
             }).toList(),
           const ThemeSelector(),
         ],
@@ -104,13 +106,14 @@ class CustomScaffold extends StatelessWidget {
                       style: TextStyle(color: Colors.white, fontSize: 24),
                     ),
                   ),
-                  ...menuProvider.getMenuItems(context).map((item) {
+                  //...menuProvider.getMenuItems(context).map((item) {
+                  ...menuProvider.getVisibleMenuItems(context).map((item) {
                     return ListTile(
                       leading: Icon(item.icon), // ✅ Map kaldırıldı
                       title: Text(item.label), // ✅ Map kaldırıldı
                       onTap: () => item.onTap!(context), // ✅ Hata düzeltildi
                     );
-                  // ignore: unnecessary_to_list_in_spreads
+                    // ignore: unnecessary_to_list_in_spreads
                   }).toList(),
                 ],
               ),

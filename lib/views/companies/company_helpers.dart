@@ -100,6 +100,8 @@ Widget buildCompanyLogo(BuildContext context, int companyId, String? existingLog
       return CustomImagePicker(
         aspectRatio: 1,
         existingImageUrl: imageUrl,
+        addWatermark: true,
+        deleteOld: true,
         meta: {'type': 'company'},
         iwidth: 80,
         iheight: 80,

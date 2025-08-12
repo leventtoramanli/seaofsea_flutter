@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/services/v1/user_service.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/quotes.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
@@ -30,13 +31,17 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController passwordController =
       TextEditingController(text: '145326326lL');
 
-  bool isLoading = false;
   final SecureStorage secureStorage = SecureStorage();
   final randomQuote = Quotes.getRandomQuote();
+
+  bool _loadingLogin = false;
+  bool _loadingAnon  = false;
+  bool get _busy => _loadingLogin || _loadingAnon;
 
   bool wideScreen = false;
   double exWidth = 0.0;
   bool rememberMe = false;
+
   @override
   void dispose() {
     emailController.dispose();
@@ -53,10 +58,10 @@ class _LoginPageState extends State<LoginPage> {
           content: const Text(
               'Please verify your email address. A verification email has been sent to your email address.'),
           actions: [
-            TextButton(onPressed: () {}, child: const Text('Send Again')),
+            TextButton(onPressed: () {/* TODO: resend */}, child: const Text('Send Again')),
             TextButton(
               onPressed: () {
-                Navigator.of(context).pop(); // Dialog'u kapat
+                Navigator.of(context).pop();
                 Navigator.pushReplacementNamed(context, '/');
               },
               child: const Text('OK'),
@@ -68,60 +73,67 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _handleLogin() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        isLoading = true;
-      });
+    if (!_formKey.currentState!.validate()) return;
 
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    setState(() => _loadingLogin = true);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    // Eğer ilerde lazım olursa:
+    // ignore: unused_local_variable
+    final v1 = Provider.of<V1ApiManager>(context, listen: false);
 
-      try {
-        await secureStorage.writeSecureData(
-            'rememberMe', rememberMe.toString());
+    try {
+      await secureStorage.writeSecureData('rememberMe', rememberMe.toString());
 
-        final success = await authProvider.v1login(
-          context,
-          emailController.text.trim(),
-          passwordController.text,
-          rememberMe: rememberMe,
+      final success = await authProvider.v1login(
+        context,
+        emailController.text.trim(),
+        passwordController.text,
+        rememberMe: rememberMe,
+      );
+      if (!success) return;
+
+      // İstersen doğrulama diyaloğunu tekrar aktif et:
+      // final userService = UserService();
+      // final result = await userService.getProfile();
+      // if (result['success'] == true) {
+      //   final user = result['user'] ?? result['data'] ?? {};
+      //   final isVerified = user['is_verified'] ?? 1;
+      //   if (isVerified != 1) {
+      //     _showEmailVerificationDialog();
+      //     return;
+      //   }
+      // }
+
+      Navigator.pushReplacementNamed(context, '/');
+    } catch (e) {
+      debugPrint('❗ Login error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("An unexpected error occurred.")),
         );
-
-        if (!success) {
-          return;
-        }
-
-        final userService = UserService();
-        final result = await userService.getProfile();
-
-        if (result['success'] == true) {
-          final user = result['user'];
-          final isVerified = user['is_verified'] ?? 1;
-
-          if (!mounted) return;
-
-          if (isVerified != 1) {
-            _showEmailVerificationDialog();
-          } else {
-            debugPrint('✅ Login successful via v1Login.');
-            Navigator.pushReplacementNamed(context, '/');
-          }
-        } else {
-          debugPrint('⚠️ Profile fetch failed: ${result['message']}');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("An error occurred")),
-            );
-          }
-        }
-      } catch (e) {
-        debugPrint('❗ Login error: $e');
-      } finally {
-        if (mounted) {
-          setState(() {
-            isLoading = false;
-          });
-        }
       }
+    } finally {
+      if (mounted) setState(() => _loadingLogin = false);
+    }
+  }
+
+  Future<void> _handleAnonLogin() async {
+    setState(() => _loadingAnon = true);
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final success = await authProvider.v1anonymousLogin(context);
+      if (success && mounted) {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+    } catch (e) {
+      debugPrint('❗ Anon login error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Anonymous sign-in failed.")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingAnon = false);
     }
   }
 
@@ -130,11 +142,7 @@ class _LoginPageState extends State<LoginPage> {
     final themeProvider = Provider.of<ThemeProvider>(context, listen: true);
 
     exWidth = MediaQuery.of(context).size.width * 0.6;
-    if (exWidth < 650) {
-      wideScreen = false;
-    } else {
-      wideScreen = true;
-    }
+    wideScreen = exWidth >= 650;
 
     final List<Map<String, dynamic>> fields = [
       {
@@ -178,7 +186,7 @@ class _LoginPageState extends State<LoginPage> {
                     ],
                   ),
                   SizedBox(width: exWidth * 0.1),
-                  page(themeProvider, fields, context)
+                  page(themeProvider, fields, context),
                 ],
               ),
             )
@@ -199,176 +207,171 @@ class _LoginPageState extends State<LoginPage> {
               : getLightBoxDecoration(),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (!wideScreen) InsImage(wideScreen: wideScreen),
-                  const SizedBox(height: 16.0),
-                  const Center(
-                    child: Text(
-                      'Welcome Back!',
-                      style: TextStyle(
-                          fontSize: 24.0, fontWeight: FontWeight.bold),
+            child: AbsorbPointer( // tüm formu _busy iken kilitler
+              absorbing: _busy,
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!wideScreen) InsImage(wideScreen: wideScreen),
+                    const SizedBox(height: 16.0),
+                    const Center(
+                      child: Text(
+                        'Welcome Back!',
+                        style: TextStyle(
+                            fontSize: 24.0, fontWeight: FontWeight.bold),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16.0),
-                  ListView.builder(
-                    itemCount: fields.length,
-                    shrinkWrap: true,
-                    //physics: const NeverScrollableScrollPhysics(),
-                    itemBuilder: (context, index) {
-                      final field = fields[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 16.0),
-                        child: CustomFormField(
-                          controller: field['controller'],
-                          themeProvider: themeProvider,
-                          label: field['label'],
-                          hint: field['hint'],
-                          icon: field['icon'],
-                          validationMessage: field['validationMessage'],
-                          isPassword: field['isPassword'] ?? false,
-                          isEmail: field['isEmail'] ?? false,
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12.0),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Checkbox(
-                              value: rememberMe,
-                              onChanged: (value) {
-                                setState(() {
-                                  rememberMe = value ?? false;
-                                });
-                              },
-                            ),
-                            Flexible(
-                              child: GestureDetector(
-                                onTap: () {
-                                  setState(() {});
-                                },
-                                child: const Text(
+                    const SizedBox(height: 16.0),
+                    ListView.builder(
+                      itemCount: fields.length,
+                      shrinkWrap: true,
+                      itemBuilder: (context, index) {
+                        final field = fields[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: CustomFormField(
+                            controller: field['controller'],
+                            themeProvider: themeProvider,
+                            label: field['label'],
+                            hint: field['hint'],
+                            icon: field['icon'],
+                            validationMessage: field['validationMessage'],
+                            isPassword: field['isPassword'] ?? false,
+                            isEmail: field['isEmail'] ?? false,
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12.0),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Checkbox(
+                                value: rememberMe,
+                                onChanged: _busy
+                                    ? null
+                                    : (value) {
+                                        setState(() {
+                                          rememberMe = value ?? false;
+                                        });
+                                      },
+                              ),
+                              const Flexible(
+                                child: Text(
                                   'Remember me',
                                   style: TextStyle(fontSize: 14.0),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      CustomButton(
-                        label: 'Login',
-                        onPressed: () {
-                          _handleLogin();
-                        },
-                        icon: Icons.login,
-                        isLoading: isLoading,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12.0),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const Terms(),
+                        CustomButton(
+                          label: 'Login',
+                          onPressed: _busy ? null : _handleLogin,
+                          icon: Icons.login,
+                          isLoading: _loadingLogin,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12.0),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: InkWell(
+                            onTap: _busy
+                                ? null
+                                : () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const Terms(),
+                                      ),
+                                    );
+                                  },
+                            child: const Text(
+                              'Terms & Conditions',
+                              style: TextStyle(
+                                fontSize: 14.0,
+                                color: Colors.blue,
+                                decoration: TextDecoration.underline,
                               ),
-                            );
-                          },
-                          child: const Text(
-                            'Terms & Conditions',
-                            style: TextStyle(
-                              fontSize: 14.0,
-                              color: Colors.blue,
-                              decoration: TextDecoration.underline,
                             ),
                           ),
                         ),
-                      ),
-                      Flexible(
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const AuthPage(
-                                    mode: AuthMode.forgotPassword),
+                        Flexible(
+                          child: InkWell(
+                            onTap: _busy
+                                ? null
+                                : () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const AuthPage(
+                                            mode: AuthMode.forgotPassword),
+                                      ),
+                                    );
+                                  },
+                            child: const Text(
+                              'Forgot Password?',
+                              style: TextStyle(
+                                fontSize: 14.0,
+                                color: Colors.blue,
+                                decoration: TextDecoration.underline,
                               ),
-                            );
-                          },
-                          child: const Text(
-                            'Forgot Password?',
-                            style: TextStyle(
-                              fontSize: 14.0,
-                              color: Colors.blue,
-                              decoration: TextDecoration.underline,
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12.0),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      CustomButton(
-                        label: 'Sign In Anonymously',
-                        onPressed: () async {
-                          final authProvider =
-                              Provider.of<AuthProvider>(context, listen: false);
-                          final success =
-                              await authProvider.v1anonymousLogin(context);
-                          if (success && context.mounted) {
-                            Navigator.pushReplacementNamed(context, '/home');
-                          }
-                        },
-                        icon: Icons.theater_comedy,
-                        backgroundColor: Colors.amber.shade400,
-                        textColor: Colors.black,
-                        isLoading: isLoading,
-                      ),
-                      const SizedBox(height: 12.0),
-                      CustomButton(
-                        label: 'Sign In with Google',
-                        onPressed: () {},
-                        icon: Icons.g_mobiledata,
-                        backgroundColor: Colors.red.shade400,
-                        textColor: Colors.white,
-                      ),
-                      const SizedBox(height: 12.0),
-                      CustomButton(
-                        label: 'Sign Up',
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const AuthPage(mode: AuthMode.register),
-                            ),
-                          );
-                        },
-                        icon: Icons.app_registration,
-                        backgroundColor: Colors.green.shade400,
-                        textColor: Colors.white,
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 12.0),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        CustomButton(
+                          label: 'Sign In Anonymously',
+                          onPressed: _busy ? null : _handleAnonLogin,
+                          icon: Icons.theater_comedy,
+                          backgroundColor: Colors.amber.shade400,
+                          textColor: Colors.black,
+                          isLoading: _loadingAnon,
+                        ),
+                        const SizedBox(height: 12.0),
+                        CustomButton(
+                          label: 'Sign In with Google',
+                          onPressed: _busy ? null : () {},
+                          icon: Icons.g_mobiledata,
+                          backgroundColor: Colors.red.shade400,
+                          textColor: Colors.white,
+                        ),
+                        const SizedBox(height: 12.0),
+                        CustomButton(
+                          label: 'Sign Up',
+                          onPressed: _busy
+                              ? null
+                              : () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const AuthPage(mode: AuthMode.register),
+                                    ),
+                                  );
+                                },
+                          icon: Icons.app_registration,
+                          backgroundColor: Colors.green.shade400,
+                          textColor: Colors.white,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

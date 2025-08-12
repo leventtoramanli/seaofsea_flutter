@@ -27,40 +27,51 @@ class CVSTCWSettingsState extends State<CVSTCWSettings> {
   final Map<int, TextEditingController> _documentNumberControllers = {};
   final List<Map<String, TextEditingController>> _visaList = [];
 
-  @override
+  String _codeOf(Map<String, dynamic> cert) =>
+      (cert['stcw_code'] ?? '').toString().toUpperCase().trim();
+
+  bool _isSeamanVisa(Map<String, dynamic> cert) =>
+      _codeOf(cert) == 'SEAMAN_VISA';
+
+  bool _needsDocNo(Map<String, dynamic> cert) {
+    final code = _codeOf(cert);
+    return code == 'PASSPORT' || code == 'SEAMANS_BOOK' || code == 'DRIVERS_LICENSE';
+  }
+
   @override
   void initState() {
     super.initState();
+
     if (widget.initialUserCertificates != null) {
-      for (var cert in widget.initialUserCertificates!) {
-        final certId = cert['id'];
+      for (final cert in widget.initialUserCertificates!) {
+        final int certId = int.parse(cert['id'].toString());
         _selected[certId] = true;
 
         _issueDateControllers[certId] =
-            TextEditingController(text: cert['isd'] ?? '');
+            TextEditingController(text: cert['isd']?.toString() ?? '');
         _expireDateControllers[certId] =
-            TextEditingController(text: cert['exd'] ?? '');
+            TextEditingController(text: cert['exd']?.toString() ?? '');
 
-        // document number (dn) alanı
         if (cert['dn'] != null && cert['dn'].toString().isNotEmpty) {
           _documentNumberControllers[certId] =
-              TextEditingController(text: cert['dn']);
+              TextEditingController(text: cert['dn'].toString());
         }
 
-        // Seaman Visa için ilk visaList verisini doldur
-        final certName = widget.allCertificates
-            .firstWhere((c) => int.parse(c['id'].toString()) == certId)['name']
-            .toString()
-            .toLowerCase();
-
-        if (certName == 'seaman visa' && cert['visas'] != null) {
-          final List<dynamic> visasRaw = cert['visas'];
-          for (var visa in visasRaw) {
-            _visaList.add({
-              'visaName': TextEditingController(text: visa['vn'] ?? ''),
-              'issueDate': TextEditingController(text: visa['isd'] ?? ''),
-              'expireDate': TextEditingController(text: visa['exd'] ?? ''),
-            });
+        // Seaman Visa için mevcut vizeleri yükle
+        final master = widget.allCertificates.firstWhere(
+          (c) => int.parse(c['id'].toString()) == certId,
+          orElse: () => {},
+        );
+        if (master.isNotEmpty && _isSeamanVisa(master)) {
+          final visasRaw = cert['visas'];
+          if (visasRaw is List) {
+            for (final v in visasRaw) {
+              _visaList.add({
+                'visaName': TextEditingController(text: (v['vn'] ?? '').toString()),
+                'issueDate': TextEditingController(text: (v['isd'] ?? '').toString()),
+                'expireDate': TextEditingController(text: (v['exd'] ?? '').toString()),
+              });
+            }
           }
         }
       }
@@ -85,72 +96,66 @@ class CVSTCWSettingsState extends State<CVSTCWSettings> {
     final selectedCertificates = <Map<String, dynamic>>[];
 
     _selected.forEach((certId, isChecked) {
-      if (isChecked) {
-        final issueDate = _issueDateControllers[certId]?.text ?? '';
-        final expireDate = _expireDateControllers[certId]?.text ?? '';
+      if (!isChecked) return;
 
-        final certData = {
-          'id': certId,
-          'isd': issueDate,
-          'exd': expireDate,
-        };
+      final issueDate = _issueDateControllers[certId]?.text ?? '';
+      final expireDate = _expireDateControllers[certId]?.text ?? '';
 
-        // Ek alan: Document Number / Type
-        final docController = _documentNumberControllers[certId];
-        if (docController != null && docController.text.isNotEmpty) {
-          certData['dn'] = docController.text;
-        }
+      final certData = <String, dynamic>{
+        'id': certId,
+        'isd': issueDate,
+        'exd': expireDate,
+      };
 
-        // Seaman Visa alanı: Visa listesi ekle
-        final certName = widget.allCertificates
-            .firstWhere((c) => int.parse(c['id'].toString()) == certId)['name']
-            .toString()
-            .toLowerCase();
-
-        if (certName == 'seaman visa') {
-          final visaList = _visaList
-              .where((visa) =>
-                  visa['visaName']!.text.isNotEmpty ||
-                  visa['issueDate']!.text.isNotEmpty ||
-                  visa['expireDate']!.text.isNotEmpty)
-              .map((visa) => {
-                    'vn': visa['visaName']!.text,
-                    'isd': visa['issueDate']!.text,
-                    'exd': visa['expireDate']!.text,
-                  })
-              .toList();
-
-          if (visaList.isNotEmpty) {
-            certData['visas'] = visaList;
-          }
-        }
-
-        selectedCertificates.add(certData);
+      final docController = _documentNumberControllers[certId];
+      if (docController != null && docController.text.trim().isNotEmpty) {
+        certData['dn'] = docController.text.trim();
       }
+
+      // Seaman visa ise alt vize dizisini ekle
+      final master = widget.allCertificates.firstWhere(
+        (c) => int.parse(c['id'].toString()) == certId,
+        orElse: () => {},
+      );
+      if (master.isNotEmpty && _isSeamanVisa(master)) {
+        final visas = _visaList
+            .where((m) =>
+                m['visaName']!.text.trim().isNotEmpty ||
+                m['issueDate']!.text.trim().isNotEmpty ||
+                m['expireDate']!.text.trim().isNotEmpty)
+            .map((m) => {
+                  'vn': m['visaName']!.text.trim(),
+                  'isd': m['issueDate']!.text.trim(),
+                  'exd': m['expireDate']!.text.trim(),
+                })
+            .toList();
+        if (visas.isNotEmpty) {
+          certData['visas'] = visas;
+        }
+      }
+
+      selectedCertificates.add(certData);
     });
+
     return selectedCertificates;
   }
 
   @override
   Widget build(BuildContext context) {
-    // 📌 Gruplama ve sıralama
-    final Map<int, List<Map<String, dynamic>>> groupedCerts = {};
-
-// 🟦 İsteye bağlı (validation yok)
-
-    for (var cert in widget.allCertificates) {
-      final groupId = int.parse(cert['group_id'].toString());
-      groupedCerts.putIfAbsent(groupId, () => []).add(cert);
+    // Grupla & sırala
+    final Map<int, List<Map<String, dynamic>>> grouped = {};
+    for (final cert in widget.allCertificates) {
+      final gid = int.tryParse(cert['group_id'].toString()) ?? 0;
+      grouped.putIfAbsent(gid, () => []).add(cert);
     }
-    groupedCerts.forEach((groupId, certs) {
-      certs.sort((a, b) {
-        final orderA = int.tryParse(a['sort_order'].toString()) ?? 0;
-        final orderB = int.tryParse(b['sort_order'].toString()) ?? 0;
-        return orderA.compareTo(orderB);
+    grouped.forEach((gid, list) {
+      list.sort((a, b) {
+        final aS = int.tryParse(a['sort_order'].toString()) ?? 0;
+        final bS = int.tryParse(b['sort_order'].toString()) ?? 0;
+        return aS.compareTo(bS);
       });
     });
 
-    // 📌 Grup başlıklarını isimlendirme
     final Map<int, String> groupNames = {
       1: 'Travel Documents',
       2: 'Medical Certificates',
@@ -166,8 +171,9 @@ class CVSTCWSettingsState extends State<CVSTCWSettings> {
       12: 'Pilotage Licenses',
       13: 'Luxury Yacht Services',
     };
-    IconData _getGroupIcon(int groupId) {
-      switch (groupId) {
+
+    IconData _icon(int gid) {
+      switch (gid) {
         case 1:
           return FontAwesomeIcons.passport;
         case 2:
@@ -187,7 +193,7 @@ class CVSTCWSettingsState extends State<CVSTCWSettings> {
         case 9:
           return FontAwesomeIcons.fishFins;
         case 10:
-          return FontAwesomeIcons.hardHat;
+          return FontAwesomeIcons.hatCowboy;
         case 11:
           return FontAwesomeIcons.ship;
         case 12:
@@ -199,185 +205,174 @@ class CVSTCWSettingsState extends State<CVSTCWSettings> {
       }
     }
 
-    final sortedGroupIds = groupedCerts.keys.toList()..sort();
+    final sortedGroupIds = grouped.keys.toList()..sort();
 
     return Form(
       key: widget.formKey,
       child: SingleChildScrollView(
         child: ExpansionPanelList.radio(
           elevation: 2,
-          expandedHeaderPadding: EdgeInsets.symmetric(vertical: 4),
-          children: sortedGroupIds.map<ExpansionPanelRadio>((groupId) {
-            final groupCerts = groupedCerts[groupId]!;
+          expandedHeaderPadding: const EdgeInsets.symmetric(vertical: 4),
+          children: sortedGroupIds.map<ExpansionPanelRadio>((gid) {
+            final certs = grouped[gid]!;
             return ExpansionPanelRadio(
-              value: groupId,
-              headerBuilder: (context, isExpanded) => ListTile(
-                leading: FaIcon(
-                  _getGroupIcon(groupId),
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                title: Text(
-                  groupNames[groupId] ?? 'Group $groupId',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+              value: gid,
+              headerBuilder: (_, isExpanded) => ListTile(
+                leading: FaIcon(_icon(gid),
+                    color: Theme.of(context).colorScheme.primary),
+                title: Text(groupNames[gid] ?? 'Group $gid',
+                    style: Theme.of(context).textTheme.titleMedium),
               ),
               body: Column(
-                children: groupCerts.map((cert) {
+                children: certs.map((cert) {
                   final certId = int.parse(cert['id'].toString());
                   final isSelected = _selected[certId] ?? false;
+                  final isVisa = _isSeamanVisa(cert);
+                  final needsDocNo = _needsDocNo(cert);
+
                   return Card(
                     margin:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Padding(
-                      padding: const EdgeInsets.all(8.0),
+                      padding: const EdgeInsets.all(8),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           CheckboxListTile(
-                            title: Text(cert['name']),
-                            subtitle: Text(cert['note'] ?? ''),
+                            title: Text(cert['name'].toString()),
+                            subtitle: Text((cert['note'] ?? '').toString()),
                             value: isSelected,
-                            onChanged: (value) {
+                            onChanged: (v) {
                               setState(() {
-                                _selected[certId] = value!;
-                                if (value) {
+                                _selected[certId] = v ?? false;
+                                if (v == true) {
                                   _issueDateControllers[certId] ??=
                                       TextEditingController();
                                   _expireDateControllers[certId] ??=
                                       TextEditingController();
+                                  if (needsDocNo &&
+                                      _documentNumberControllers[certId] ==
+                                          null) {
+                                    _documentNumberControllers[certId] =
+                                        TextEditingController();
+                                  }
                                 }
                               });
                             },
                           ),
-                          if (isSelected)
-                            Column(
-                              children: [
-                                if (cert['name'] == 'Seaman Visa')
-                                  Column(
-                                    children: [
-                                      ..._visaList.map((visa) {
-                                        return Card(
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(8.0),
-                                            child: Column(
-                                              children: [
-                                                CustomFormField(
-                                                  controller: visa['visaName']!,
-                                                  themeProvider: Provider.of<
-                                                          ThemeProvider>(
-                                                      context,
-                                                      listen: false),
-                                                  label: 'Visa Name',
-                                                  hint: 'e.g. Schengen, USA...',
-                                                  icon: const Icon(
-                                                      Icons.assignment),
-                                                  isRequired: false,
-                                                ),
-                                                const SizedBox(height: 8),
-                                                CustomFormField(
-                                                  controller:
-                                                      visa['issueDate']!,
-                                                  themeProvider: Provider.of<
-                                                          ThemeProvider>(
-                                                      context,
-                                                      listen: false),
-                                                  label: 'Issue Date',
-                                                  hint: 'Enter Issue Date',
-                                                  icon: const Icon(
-                                                      Icons.date_range),
-                                                  isDate: true,
-                                                  lastDate: 10,
-                                                  context: context,
-                                                  isRequired: false,
-                                                ),
-                                                const SizedBox(height: 8),
-                                                CustomFormField(
-                                                  controller:
-                                                      visa['expireDate']!,
-                                                  themeProvider: Provider.of<
-                                                          ThemeProvider>(
-                                                      context,
-                                                      listen: false),
-                                                  label: 'Expire Date',
-                                                  hint: 'Enter Expiry Date',
-                                                  icon: const Icon(
-                                                      Icons.date_range),
-                                                  isDate: true,
-                                                  lastDate: 10,
-                                                  context: context,
-                                                  isRequired: false,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      }),
-                                      ElevatedButton.icon(
-                                        onPressed: _addVisa,
-                                        icon: const Icon(Icons.add),
-                                        label: const Text('Add Visa'),
-                                      ),
-                                    ],
-                                  ),
-                                if (cert['name'] == 'Passport' ||
-                                    cert['name'] == 'Seaman’s Book' ||
-                                    cert['name'] == 'Drivers License')
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 4.0),
-                                    child: CustomFormField(
-                                      controller:
-                                          _documentNumberControllers[certId] ??=
-                                              TextEditingController(),
-                                      themeProvider: Provider.of<ThemeProvider>(
-                                          context,
-                                          listen: false),
-                                      label: cert['name'] == 'Drivers License'
-                                          ? '${cert['name']} Type'
-                                          : '${cert['name']} Number',
-                                      hint: cert['name'] == 'Passport'
-                                          ? 'e.g. U000000'
-                                          : cert['name'] == 'Seaman’s Book'
-                                              ? 'e.g. S000000'
-                                              : 'e.g. A, A2, B, C...',
-                                      icon:
-                                          const Icon(Icons.confirmation_number),
-                                      isRequired: false, // Zorunlu değil!
+
+                          if (isSelected && isVisa) ...[
+                            // Seaman Visa alt vizeleri
+                            ..._visaList.map((visa) => Card(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Column(
+                                      children: [
+                                        CustomFormField(
+                                          controller: visa['visaName']!,
+                                          themeProvider:
+                                              Provider.of<ThemeProvider>(
+                                                  context,
+                                                  listen: false),
+                                          label: 'Visa Name',
+                                          hint: 'e.g. Schengen, USA...',
+                                          icon:
+                                              const Icon(Icons.assignment_outlined),
+                                          isRequired: false,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        CustomFormField(
+                                          controller: visa['issueDate']!,
+                                          themeProvider:
+                                              Provider.of<ThemeProvider>(
+                                                  context,
+                                                  listen: false),
+                                          label: 'Issue Date',
+                                          hint: 'Enter Issue Date',
+                                          icon: const Icon(Icons.date_range),
+                                          isDate: true,
+                                          lastDate: 10,
+                                          context: context,
+                                          isRequired: false,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        CustomFormField(
+                                          controller: visa['expireDate']!,
+                                          themeProvider:
+                                              Provider.of<ThemeProvider>(
+                                                  context,
+                                                  listen: false),
+                                          label: 'Expire Date',
+                                          hint: 'Enter Expiry Date',
+                                          icon: const Icon(Icons.date_range),
+                                          isDate: true,
+                                          lastDate: 10,
+                                          context: context,
+                                          isRequired: false,
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                if (cert['name'] != 'Seaman Visa')
-                                  const SizedBox(height: 8),
-                                if (cert['name'] != 'Seaman Visa')
-                                  CustomFormField(
-                                    controller: _issueDateControllers[certId]!,
-                                    themeProvider: Provider.of<ThemeProvider>(
-                                        context,
-                                        listen: false),
-                                    label: 'Issue Date',
-                                    hint: 'Select Issue Date',
-                                    icon: const Icon(Icons.calendar_today),
-                                    isDate: true,
-                                    lastDate: 10,
-                                    context: context,
-                                    validationMessage: 'Required',
-                                  ),
-                                const SizedBox(height: 8),
-                                if (cert['name'] != 'Seaman Visa')
-                                  CustomFormField(
-                                    controller: _expireDateControllers[certId]!,
-                                    themeProvider: Provider.of<ThemeProvider>(
-                                        context,
-                                        listen: false),
-                                    label: 'Expire Date',
-                                    hint: 'Enter Expiry Date',
-                                    icon: const Icon(Icons.date_range),
-                                    isDate: false,
-                                    lastDate: 10,
-                                    context: context,
-                                    isRequired: false,
-                                  ),
-                              ],
+                                )),
+                            ElevatedButton.icon(
+                              onPressed: _addVisa,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Visa'),
                             ),
+                          ],
+
+                          if (isSelected && needsDocNo)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 4.0),
+                              child: CustomFormField(
+                                controller:
+                                    _documentNumberControllers[certId] ??=
+                                        TextEditingController(),
+                                themeProvider: Provider.of<ThemeProvider>(
+                                    context,
+                                    listen: false),
+                                label: _codeOf(cert) == 'DRIVERS_LICENSE'
+                                    ? '${cert['name']} Type'
+                                    : '${cert['name']} Number',
+                                hint: _codeOf(cert) == 'PASSPORT'
+                                    ? 'e.g. U000000'
+                                    : _codeOf(cert) == 'SEAMANS_BOOK'
+                                        ? 'e.g. S000000'
+                                        : 'e.g. A, A2, B, C...',
+                                icon: const Icon(Icons.confirmation_number),
+                                isRequired: false,
+                              ),
+                            ),
+
+                          if (isSelected && !isVisa) ...[
+                            const SizedBox(height: 8),
+                            CustomFormField(
+                              controller: _issueDateControllers[certId]!,
+                              themeProvider: Provider.of<ThemeProvider>(context,
+                                  listen: false),
+                              label: 'Issue Date',
+                              hint: 'Select Issue Date',
+                              icon: const Icon(Icons.calendar_today),
+                              isDate: true,
+                              lastDate: 10,
+                              context: context,
+                              validationMessage: 'Required',
+                            ),
+                            const SizedBox(height: 8),
+                            CustomFormField(
+                              controller: _expireDateControllers[certId]!,
+                              themeProvider: Provider.of<ThemeProvider>(context,
+                                  listen: false),
+                              label: 'Expire Date',
+                              hint: 'Enter Expiry Date',
+                              icon: const Icon(Icons.date_range),
+                              isDate: true,
+                              lastDate: 10,
+                              context: context,
+                              isRequired: false,
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -386,9 +381,21 @@ class CVSTCWSettingsState extends State<CVSTCWSettings> {
               ),
             );
           }).toList(),
-          // Burada toList()!
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    for (final c in _issueDateControllers.values) c.dispose();
+    for (final c in _expireDateControllers.values) c.dispose();
+    for (final c in _documentNumberControllers.values) c.dispose();
+    for (final m in _visaList) {
+      m['visaName']?.dispose();
+      m['issueDate']?.dispose();
+      m['expireDate']?.dispose();
+    }
+    super.dispose();
   }
 }

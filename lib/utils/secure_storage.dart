@@ -23,6 +23,14 @@ class SecureStorage {
     }
   }
 
+  Future<void> writeNullable(String key, String? value) async {
+    if (value == null) {
+      await deleteSecureData(key);
+    } else {
+      await writeSecureData(key, value);
+    }
+  }
+
   Future<String?> readSecureData(String key) async {
     final prefs = await SharedPreferences.getInstance();
     final encryptedValue = prefs.getString(key);

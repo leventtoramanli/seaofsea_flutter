@@ -7,6 +7,7 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:provider/provider.dart';
 import 'package:seaofsea/services/providers.dart';
 import 'package:seaofsea/services/routes.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/color_blindness_provider.dart';
 import 'package:seaofsea/utils/theme_data.dart';
@@ -24,8 +25,13 @@ class MyHttpOverrides extends HttpOverrides {
   }
 }
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  V1ApiManager.onUnauthorized = () {
+    navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (route) => false);
+  };
   if (const bool.fromEnvironment('dart.vm.product') == false) {
     if (!kReleaseMode) {
       HttpOverrides.global = MyHttpOverrides();
@@ -56,6 +62,7 @@ class MmsApp extends StatelessWidget {
           ColorFiltered(
             colorFilter: colorBlindnessProvider.currentFilter,
             child: MaterialApp(
+              navigatorKey: navigatorKey,
               title: 'SeaOfSea',
               theme: lightTheme,
               darkTheme: darkTheme,

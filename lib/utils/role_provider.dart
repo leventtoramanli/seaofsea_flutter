@@ -7,6 +7,9 @@ class RoleProvider with ChangeNotifier {
 
   List<Map<String, dynamic>> get roles => _roles;
 
+  static RoleProvider of(BuildContext context, {bool listen = false}) =>
+      Provider.of<RoleProvider>(context, listen: listen);
+
   Future<void> fetchRoles(BuildContext context) async {
     try {
       final apiManager = Provider.of<ApiManager>(context, listen: false);

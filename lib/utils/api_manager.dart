@@ -321,7 +321,7 @@ class ApiManager {
     if (userId == null || userId.isEmpty) {
       // ✅ DÜZENLENDİ: Kullanıcı ID boşsa AuthProvider güncelleniyor
       debugPrint("User ID is empty, refreshing user info...");
-      await authProvider.refreshUserInfo(context);
+      //await authProvider.refreshUserInfo(context);
       userId = await secureStorage.readSecureData('userId');
     }
 
@@ -368,7 +368,7 @@ class ApiManager {
         await secureStorage.writeSecureData(
             endpoint.contains('profile') ? 'profileImage' : 'coverImage',
             newImage);
-        await authProvider.refreshUserInfo(context);
+        //await authProvider.refreshUserInfo(context);
         imageCache.clear();
         imageCache.clearLiveImages();
 
