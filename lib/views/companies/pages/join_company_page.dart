@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
 
 class JoinCompanyPage extends StatefulWidget {
   final int? companyId;
-
   const JoinCompanyPage({super.key, this.companyId});
 
   @override
@@ -13,6 +11,8 @@ class JoinCompanyPage extends StatefulWidget {
 }
 
 class _JoinCompanyPageState extends State<JoinCompanyPage> {
+  final v1 = V1ApiManager();
+
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _customPositionController =
       TextEditingController();
@@ -34,98 +34,118 @@ class _JoinCompanyPageState extends State<JoinCompanyPage> {
   void initState() {
     super.initState();
     _loadJoinedCompanies();
-    _fetchAreaOptions();
+    _fetchAreaOptions(); // opsiyonel: yoksa sessiz geçer
     if (widget.companyId != null) {
       _fetchCompanyById(widget.companyId!);
     }
   }
 
   Future<void> _fetchAreaOptions() async {
-    final api = Provider.of<ApiManager>(context, listen: false);
-    final response = await api.post(context, 'get_position_areas', {});
-
-    if (response['success'] == true &&
-        response['data'] is Map<String, dynamic>) {
-      final raw = response['data'] as Map<String, dynamic>;
-      final parsed = raw.map((key, value) {
-        return MapEntry(key, List<String>.from(value));
-      });
-
-      setState(() {
-        _areaOptions = parsed;
-      });
-    }
+    // Eğer henüz v1’de uç yoksa sessiz fallback:
+    try {
+      final res = await v1.call(
+        module: 'position',
+        action: 'areas',
+        params: {},
+        context: context,
+      );
+      if (res['success'] == true && res['data'] is Map) {
+        final raw = Map<String, dynamic>.from(res['data']);
+        setState(() {
+          _areaOptions = raw.map((k, v) => MapEntry(k, List<String>.from(v)));
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _fetchPositions({String? area}) async {
     if (_selectedArea == null) return;
-
     setState(() {
       _isLoading = true;
       _positionList = [];
     });
 
-    final api = Provider.of<ApiManager>(context, listen: false);
-    final response = await api.post(context, 'get_positions_by_area', {
-      'area': _selectedArea,
-    });
-
-    if (response['success'] == true && response['data'] is List) {
-      final items = response['data'] as List;
-      setState(() {
-        _positionList = items.map((e) => e['name'].toString()).toList();
-      });
-    }
+    try {
+      final res = await v1.call(
+        module: 'position',
+        action: 'by_area',
+        params: {'area': _selectedArea},
+        context: context,
+      );
+      if (res['success'] == true && res['data'] is List) {
+        final items = List.from(res['data']);
+        setState(() {
+          _positionList = items
+              .map((e) => (e['name'] ?? '').toString())
+              .where((e) => e.isNotEmpty)
+              .toList();
+        });
+      }
+    } catch (_) {}
 
     setState(() => _isLoading = false);
   }
 
   Future<void> _loadJoinedCompanies({String? area}) async {
-    final api = Provider.of<ApiManager>(context, listen: false);
-    final res = await api
-        .post(context, 'get_user_companies', {if (area != null) 'area': area});
-    if (res['success'] == true && res['data'] is List) {
-      final companies = res['data'] as List;
+    final res = await v1.call(
+      module: 'company',
+      action: 'my_list',
+      params: {},
+      context: context,
+    );
+
+    if (res['success'] == true &&
+        res['data'] is Map &&
+        res['data']['items'] is List) {
+      final items = List.from(res['data']['items']);
       setState(() {
-        _joinedCompanyIds = companies.map((e) => e['id'] as int).toList();
+        _joinedCompanyIds = items
+            .map((e) =>
+                int.tryParse((e['company_id'] ?? e['id']).toString()) ?? 0)
+            .where((x) => x > 0)
+            .toList();
       });
     }
   }
 
   Future<void> _fetchCompanyById(int id) async {
-    final api = Provider.of<ApiManager>(context, listen: false);
-    final response = await api.post(context, 'get_company_detail', {
-      'company_id': id,
-    });
+    final res = await v1.call(
+      module: 'company',
+      action: 'detail',
+      params: {'id': id},
+      context: context,
+    );
 
-    if (response['success'] == true && response['data'] != null) {
-      setState(() {
-        _selectedCompany = response['data'];
-      });
+    if (res['success'] == true && res['data'] is Map) {
+      setState(() => _selectedCompany = Map<String, dynamic>.from(res['data']));
     } else {
-      setState(() {
-        _error = 'Company not found.';
-      });
+      setState(() => _error = 'Company not found.');
     }
   }
 
   Future<void> _attemptJoin() async {
     if (_selectedCompany == null) return;
-    final api = Provider.of<ApiManager>(context, listen: false);
-    final response = await api.post(context, 'create_user_company', {
-      'company_id': _selectedCompany!['id'].toString(),
-      'role': 'employee',
-      'rank': _selectedPosition == 'Other'
-          ? _customPositionController.text.trim()
-          : _selectedPosition,
-    });
 
-    if (response['success'] == true) {
+    final rank = _selectedPosition == 'Other'
+        ? _customPositionController.text.trim()
+        : _selectedPosition;
+
+    final res = await v1.call(
+      module: 'company',
+      action: 'add_member',
+      params: {
+        'company_id': _selectedCompany!['id'],
+        'role': 'employee',
+        if (rank != null && rank.isNotEmpty) 'rank': rank,
+      },
+      context: context,
+    );
+
+    if (res['success'] == true || res['ok'] == true) {
       if (mounted) Navigator.pop(context, true);
     } else {
-      setState(() {
-        _error = response['message'] ?? 'Failed to join company.';
-      });
+      setState(() =>
+          _error = (res['message'] ?? 'Failed to join company.').toString());
     }
   }
 
@@ -137,24 +157,33 @@ class _JoinCompanyPageState extends State<JoinCompanyPage> {
       _error = null;
     });
 
-    final api = Provider.of<ApiManager>(context, listen: false);
-    final response = await api.post(context, 'get_companies', {
-      'search': query.trim(),
-      'limit': 10,
-    });
+    final res = await v1.call(
+      module: 'company',
+      action: 'list',
+      params: {'q': query.trim(), 'page': 1, 'perPage': 10},
+      context: context,
+    );
 
-    if (response['success'] == true && response['data']?['items'] is List) {
-      final List items = response['data']['items'];
-      final List<Map<String, dynamic>> companies =
-          items.cast<Map<String, dynamic>>();
-
-      _searchResults = companies.map((company) {
-        final isMember = _joinedCompanyIds.contains(company['id']);
-        return {...company, 'is_member': isMember};
-      }).toList();
+    if (res['success'] == true &&
+        res['data'] is Map &&
+        res['data']['items'] is List) {
+      final items = List<Map<String, dynamic>>.from(
+        List.from(res['data']['items'])
+            .map((e) => Map<String, dynamic>.from(e)),
+      );
+      setState(() {
+        _searchResults = items.map((c) {
+          final id =
+              int.tryParse((c['id'] ?? c['company_id']).toString()) ?? -1;
+          final isMember = _joinedCompanyIds.contains(id);
+          return {...c, 'is_member': isMember, 'id': id};
+        }).toList();
+      });
     } else {
-      _error = 'No companies found.';
-      _searchResults.clear();
+      setState(() {
+        _error = 'No companies found.';
+        _searchResults.clear();
+      });
     }
 
     setState(() => _isLoading = false);
@@ -162,11 +191,10 @@ class _JoinCompanyPageState extends State<JoinCompanyPage> {
 
   Widget _buildCompanyTile(Map<String, dynamic> company) {
     final bool isMember = company['is_member'] == true;
-
     return ListTile(
       leading: const Icon(Icons.business),
-      title: Text(company['name'] ?? 'Unnamed'),
-      subtitle: Text(company['email'] ?? ''),
+      title: Text((company['name'] ?? 'Unnamed').toString()),
+      subtitle: Text((company['email'] ?? '').toString()),
       trailing: isMember
           ? const Text('Already Joined', style: TextStyle(color: Colors.grey))
           : ElevatedButton(
@@ -184,29 +212,32 @@ class _JoinCompanyPageState extends State<JoinCompanyPage> {
       children: [
         ListTile(
           leading: const Icon(Icons.business),
-          title: Text(_selectedCompany!['name'] ?? 'Unnamed'),
-          subtitle: Text(_selectedCompany!['email'] ?? ''),
+          title: Text((_selectedCompany!['name'] ?? 'Unnamed').toString()),
+          subtitle: Text((_selectedCompany!['email'] ?? '').toString()),
         ),
         const SizedBox(height: 16),
-        DropdownButtonFormField<String>(
-          value: _selectedAreaType,
-          decoration: const InputDecoration(
-            labelText: 'Are you applying for a ship or office position?',
-            border: OutlineInputBorder(),
+
+        // ——— Opsiyonel area/pozisyon ———
+        if (_areaOptions.isNotEmpty)
+          DropdownButtonFormField<String>(
+            value: _selectedAreaType,
+            decoration: const InputDecoration(
+              labelText: 'Are you applying for a ship or office position?',
+              border: OutlineInputBorder(),
+            ),
+            items: _areaOptions.keys
+                .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                .toList(),
+            onChanged: (value) {
+              setState(() {
+                _selectedAreaType = value;
+                _selectedArea = null;
+                _selectedPosition = null;
+              });
+            },
           ),
-          items: _areaOptions.keys.map((type) {
-            return DropdownMenuItem(value: type, child: Text(type));
-          }).toList(),
-          onChanged: (value) {
-            setState(() {
-              _selectedAreaType = value;
-              _selectedArea = null;
-              _selectedPosition = null;
-              _loadJoinedCompanies(area: _selectedAreaType);
-            });
-          },
-        ),
-        const SizedBox(height: 16),
+        if (_areaOptions.isNotEmpty) const SizedBox(height: 16),
+
         if (_selectedAreaType != null &&
             _areaOptions[_selectedAreaType] != null)
           DropdownButtonFormField<String>(
@@ -215,9 +246,9 @@ class _JoinCompanyPageState extends State<JoinCompanyPage> {
               labelText: 'Select Department Area',
               border: OutlineInputBorder(),
             ),
-            items: _areaOptions[_selectedAreaType]!.map((area) {
-              return DropdownMenuItem(value: area, child: Text(area));
-            }).toList(),
+            items: _areaOptions[_selectedAreaType]!
+                .map((area) => DropdownMenuItem(value: area, child: Text(area)))
+                .toList(),
             onChanged: (value) {
               setState(() {
                 _selectedArea = value;
@@ -226,25 +257,23 @@ class _JoinCompanyPageState extends State<JoinCompanyPage> {
               _fetchPositions(area: value);
             },
           ),
-        const SizedBox(height: 16),
-        if (_selectedArea != null && !_isLoading)
-          DropdownButtonFormField<String>(
-            value: _positionList.contains(_selectedPosition)
-                ? _selectedPosition
-                : null,
-            decoration: const InputDecoration(
-              labelText: 'Select Position',
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              ..._positionList
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e))),
-              const DropdownMenuItem(value: 'Other', child: Text('Other')),
-            ],
-            onChanged: (value) {
-              setState(() => _selectedPosition = value);
-            },
+        if (_selectedAreaType != null) const SizedBox(height: 16),
+
+        DropdownButtonFormField<String>(
+          value: _positionList.contains(_selectedPosition)
+              ? _selectedPosition
+              : null,
+          decoration: const InputDecoration(
+            labelText: 'Select Position',
+            border: OutlineInputBorder(),
           ),
+          items: [
+            ..._positionList
+                .map((e) => DropdownMenuItem(value: e, child: Text(e))),
+            const DropdownMenuItem(value: 'Other', child: Text('Other')),
+          ],
+          onChanged: (value) => setState(() => _selectedPosition = value),
+        ),
         const SizedBox(height: 16),
         if (_selectedPosition == 'Other')
           TextField(

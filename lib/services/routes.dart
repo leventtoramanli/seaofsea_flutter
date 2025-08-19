@@ -5,16 +5,17 @@ import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/views/admin_dashboard.dart';
 import 'package:seaofsea/views/auth/auth_page.dart';
 import 'package:seaofsea/views/companies/company_detail_page.dart';
-import 'package:seaofsea/views/companies/company_setting_page.dart';
-import 'package:seaofsea/views/companies/company_user_page.dart';
-import 'package:seaofsea/views/companies/compny_list_page.dart';
-import 'package:seaofsea/views/companies/create_new_compny.dart';
-import 'package:seaofsea/views/companies/join_company_page.dart';
-import 'package:seaofsea/views/companies/manage_companies.dart';
-import 'package:seaofsea/views/companies/manage_company_users.dart';
+import 'package:seaofsea/views/companies/pages/company_notifications_page.dart';
+import 'package:seaofsea/views/companies/pages/company_setting_page.dart';
+import 'package:seaofsea/views/companies/pages/company_user_page.dart';
+import 'package:seaofsea/views/companies/pages/company_list_page.dart';
+import 'package:seaofsea/views/companies/pages/create_new_company_page.dart';
+import 'package:seaofsea/views/companies/pages/join_company_page.dart';
+import 'package:seaofsea/views/companies/pages/manage_companies.dart';
+import 'package:seaofsea/views/companies/pages/manage_company_users.dart';
 import 'package:seaofsea/views/companies/update_company_page.dart';
 import 'package:seaofsea/views/home_page.dart';
-import 'package:seaofsea/views/companies/job_application_page.dart';
+import 'package:seaofsea/views/companies/pages/job_application_page.dart';
 import 'package:seaofsea/views/public_profile_page.dart';
 import 'package:seaofsea/views/user_settings/settings_page.dart';
 
@@ -32,7 +33,10 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
       return MaterialPageRoute(builder: (context) => const HomePage());
     // routes.dart (veya onGenerateRoute içinde)
     case '/admin':
-      return MaterialPageRoute(builder: (_) => const AdminDashboard());
+      return MaterialPageRoute(
+        builder: (_) => const AdminDashboard(),
+        settings: settings,
+      );
 
     case '/settings':
       return MaterialPageRoute(
@@ -61,16 +65,43 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
     case '/company_list':
       return MaterialPageRoute(builder: (context) => const CompanyListPage());
     case '/company_detail':
-      return MaterialPageRoute(
-        builder: (context) => CompanyShowcasePage(
-          companyData: settings.arguments as Map<String, dynamic>,
-        ),
-      );
+      {
+        final args = settings.arguments;
+
+        // 1) Map olarak geldiyse direkt kullan
+        if (args is Map<String, dynamic>) {
+          return MaterialPageRoute(
+            builder: (_) => CompanyDetailPage(
+              // ← sınıf adını *gerçek* olanla eşleştir
+              companyData: args,
+            ),
+            settings: settings,
+          );
+        }
+
+        // 2) Sadece ID geldiyse (bazı yerlerde int dönebiliyor)
+        if (args is int) {
+          return MaterialPageRoute(
+            builder: (_) => CompanyDetailPage(
+              companyData: {'id': args}, // minimal data
+            ),
+            settings: settings,
+          );
+        }
+
+        // 3) Hatalı/eksik argüman
+        return MaterialPageRoute(
+          builder: (_) => const _BadArgsPage(
+            message: 'Missing or invalid arguments for /company_detail',
+          ),
+          settings: settings,
+        );
+      }
     case '/update_company':
+      final args = (settings.arguments as Map<String, dynamic>?) ?? {};
       return MaterialPageRoute(
-        builder: (context) => UpdateCompanyPage(
-          companyData: settings.arguments as Map<String, dynamic>,
-        ),
+        builder: (_) => UpdateCompanyPage(companyData: args),
+        settings: settings,
       );
 
     case '/manage_company_users':
@@ -107,6 +138,11 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
         builder: (context) => const PermissionDebugPage(),
         settings: settings,
       );
+    case '/company_notifications':
+      return MaterialPageRoute(
+        builder: (_) => const CompanyNotificationsPage(),
+        settings: settings,
+      );
 
     default:
       return MaterialPageRoute(
@@ -116,9 +152,20 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
   }
 }
 
-void navigateReplacement(BuildContext context, String routeName,
-    {Object? arguments}) {
-  Navigator.of(context).pushReplacement(
-    generateRoute(RouteSettings(name: routeName, arguments: arguments))!,
-  );
+class _BadArgsPage extends StatelessWidget {
+  final String message;
+  const _BadArgsPage({this.message = 'Bad or missing arguments'});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Navigation Error')),
+      body: Center(child: Text(message)),
+    );
+  }
+}
+
+void navigateReplacement(BuildContext context, String routeName, {Object? arguments}) {
+  final r = generateRoute(RouteSettings(name: routeName, arguments: arguments));
+  if (r != null) Navigator.of(context).pushReplacement(r);
 }

@@ -259,7 +259,7 @@ class AuthService {
     final res = await _api.call(
       module: 'auth',
       action: 'logout',
-      requiresAuth: false,
+      requiresAuth: true,
       params: params,
     );
 

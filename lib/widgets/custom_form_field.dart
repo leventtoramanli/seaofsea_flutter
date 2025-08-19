@@ -24,29 +24,34 @@ class CustomFormField extends StatelessWidget {
   final bool isRequired;
   final VoidCallback? onFieldSubmitted;
   final bool showField;
+  final FocusNode? focusNode;
+  final bool autofocus;
 
-  const CustomFormField(
-      {super.key,
-      required this.controller,
-      required this.themeProvider,
-      required this.label,
-      required this.hint,
-      required this.icon,
-      this.validationMessage,
-      this.isPassword = false,
-      this.isEmail = false,
-      this.isNumeric = false,
-      this.isDate = false,
-      this.isPhone = false,
-      this.isUrl = false,
-      this.isSelect = false,
-      this.selectItems = const [],
-      this.context,
-      this.maxLines = 1,
-      this.isRequired = true,
-      this.onFieldSubmitted,
-      this.showField = true,
-      this.lastDate = 0});
+  const CustomFormField({
+    super.key,
+    required this.controller,
+    required this.themeProvider,
+    required this.label,
+    required this.hint,
+    required this.icon,
+    this.validationMessage,
+    this.isPassword = false,
+    this.isEmail = false,
+    this.isNumeric = false,
+    this.isDate = false,
+    this.isPhone = false,
+    this.isUrl = false,
+    this.isSelect = false,
+    this.selectItems = const [],
+    this.context,
+    this.maxLines = 1,
+    this.isRequired = true,
+    this.onFieldSubmitted,
+    this.showField = true,
+    this.lastDate = 0,
+    this.focusNode,
+    this.autofocus = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +118,8 @@ class CustomFormField extends StatelessWidget {
 
         return TextFormField(
           controller: controller,
+          focusNode: focusNode,
+          autofocus: autofocus,
           obscureText: obsText,
           readOnly: isDate, // Tarih seçimi için klavye kapatılır
           onTap: isDate

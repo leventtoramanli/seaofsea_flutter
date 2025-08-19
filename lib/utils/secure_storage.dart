@@ -14,6 +14,10 @@ class SecureStorage {
 
   Future<void> writeSecureData(String key, String value) async {
     final prefs = await SharedPreferences.getInstance();
+    if (value.isEmpty) {
+      await deleteSecureData(key);
+      return;
+    }
     try {
       final encryptedValue =
           _encrypter.encrypt(value, iv: _encryptionIV).base64;
@@ -24,7 +28,7 @@ class SecureStorage {
   }
 
   Future<void> writeNullable(String key, String? value) async {
-    if (value == null) {
+    if (value == null || value.isEmpty) {
       await deleteSecureData(key);
     } else {
       await writeSecureData(key, value);

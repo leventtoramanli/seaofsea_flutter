@@ -1,5 +1,6 @@
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
+import 'package:seaofsea/services/screensaver_service.dart';
 import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
@@ -19,6 +20,7 @@ List<SingleChildWidget> providers = [
   ChangeNotifierProvider(create: (_) => MenuItemsProvider()..loadDynamicMenuItems()),
   ChangeNotifierProvider(create: (_) => DynamicFieldProvider()),
   ChangeNotifierProvider(create: (_) => PermissionProvider()),
+  ChangeNotifierProvider(create: (_) => ScreenSaverService()..init()),
   ProxyProvider<AuthProvider, ApiManager>(
     update: (context, authProvider, apiManager) =>
         ApiManager(authProvider.token),

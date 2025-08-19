@@ -16,14 +16,18 @@ import 'package:seaofsea/utils/secure_storage.dart';
 import 'v1_config.dart';
 
 class V1ApiManager {
+  // Global navigation / unauthorized handling hooks
+  static GlobalKey<NavigatorState>? navKey;
+  static void Function()? onUnauthorized;
+
   final String baseUrl;
   final SecureStorage _storage = SecureStorage();
   String? deviceUUID;
-  static bool debugForceExpiringSoon = false; // debug amaçlı
+  static bool debugForceExpiringSoon = false; // only for local simulation
 
-  /// Aynı anda gelen refresh isteklerini tekilleştirmek için.
-  /// true = refresh başarılı, false = başarısız.
+  /// single-flight locks
   static Future<bool>? _refreshLock;
+  static Future<bool>? _reauthLock;
 
   V1ApiManager({this.baseUrl = V1Config.baseUrl});
 
@@ -31,10 +35,6 @@ class V1ApiManager {
     deviceUUID ??= await _storage.readSecureData('deviceUUID');
   }
 
-  /// 401 sonrası global yönlendirme için (örn. login’e dön)
-  static void Function()? onUnauthorized;
-
-  /// deviceUUID yoksa üret ve kaydet (refresh öncesi garanti ederiz)
   Future<void> _ensureDeviceUUID() async {
     await _initDeviceUUID();
     if (deviceUUID == null || deviceUUID!.isEmpty) {
@@ -106,7 +106,6 @@ class V1ApiManager {
     };
   }
 
-  /// refreshToken cevabı bazen {data:{token,..}} bazen {token,..} olabilir → normalize et
   Map<String, String?> _extractTokens(dynamic refreshResult) {
     if (refreshResult is Map) {
       final data = refreshResult['data'];
@@ -125,7 +124,6 @@ class V1ApiManager {
     return {'token': null, 'refresh': null};
   }
 
-  /// Tek bir gerçek refresh denemesi. Başarılı → true, değilse false.
   Future<bool> _refreshOnce() async {
     await _ensureDeviceUUID();
 
@@ -145,25 +143,17 @@ class V1ApiManager {
     return true;
   }
 
-  /// Aynı anda birden fazla re-auth popup açılmasını engelle
-  static Future<bool>? _reauthLock;
+  Future<bool> _refreshWithLock() async {
+    final f = _refreshLock ??= _refreshOnce();
+    final ok = await f;
+    if (identical(_refreshLock, f)) _refreshLock = null;
+    return ok;
+  }
 
   Future<bool> _reauthWithLock(BuildContext context) async {
     final f = _reauthLock ??= _showReAuthDialog(context);
     final ok = await f;
-    if (identical(_reauthLock, f)) {
-      _reauthLock = null;
-    }
-    return ok;
-  }
-
-  /// Eşzamanlı refresh çağrılarını tek future üzerinde birleştirir.
-  Future<bool> _refreshWithLock() async {
-    final f = _refreshLock ??= _refreshOnce();
-    final ok = await f;
-    if (identical(_refreshLock, f)) {
-      _refreshLock = null;
-    }
+    if (identical(_reauthLock, f)) _reauthLock = null;
     return ok;
   }
 
@@ -177,13 +167,13 @@ class V1ApiManager {
     String? fileType,
     String? fileName,
     void Function(double progress)? onProgress,
-    bool retried = false, // internal flag
+    bool retried = false,
   }) async {
     final dio = Dio();
     final uri = '$baseUrl/v1/index.php';
 
     debugPrint("🔗 API Call: $module.$action");
-    await _ensureDeviceUUID(); // refresh’ten önce de garanti
+    await _ensureDeviceUUID();
 
     String? token;
 
@@ -195,22 +185,44 @@ class V1ApiManager {
       }
 
       final rememberMe = await _storage.readSecureData('rememberMe') == 'true';
+      final hasRefresh =
+          (await _storage.readSecureData('refreshToken'))?.isNotEmpty == true;
       String? tokenCandidate = rawToken;
 
-      // Preflight: token süresi bitti/bitmek üzere → remember'ı kontrol et
-      if (_isTokenExpired(rawToken) || _isTokenExpiringSoon(rawToken)) {
-        if (rememberMe) {
+      final isExpired = _isTokenExpired(rawToken);
+      final isSoon = _isTokenExpiringSoon(rawToken);
+
+      // —— Preflight decisions
+      if (isExpired) {
+        debugPrint(
+            '[AUTH] preflight: token EXPIRED, remember=$rememberMe, hasRefresh=$hasRefresh');
+
+        if (rememberMe && hasRefresh) {
           final ok = await _refreshWithLock();
           if (!ok) {
-            await AuthProvider.instance.v1logout();
-            V1ApiManager.onUnauthorized?.call();
-            return _unauthorizedResponse(
-                'Session expired. Please log in again.');
+            // try re-auth as fallback (don’t kick user immediately)
+            final ctx = context ?? V1ApiManager.navKey?.currentContext;
+            if (ctx != null) {
+              final reok = await _reauthWithLock(ctx);
+              if (!reok) {
+                await AuthProvider.instance.v1logout();
+                V1ApiManager.onUnauthorized?.call();
+                return _unauthorizedResponse('Session expired.');
+              }
+              tokenCandidate = await _storage.readSecureData('authToken');
+            } else {
+              await AuthProvider.instance.v1logout();
+              V1ApiManager.onUnauthorized?.call();
+              return _unauthorizedResponse('Session expired.');
+            }
+          } else {
+            tokenCandidate = await _storage.readSecureData('authToken');
           }
-          tokenCandidate = await _storage.readSecureData('authToken');
         } else {
-          if (context != null) {
-            final ok = await _reauthWithLock(context);
+          // remember=false → ask password inline if possible
+          final ctx = context ?? V1ApiManager.navKey?.currentContext;
+          if (ctx != null) {
+            final ok = await _reauthWithLock(ctx);
             if (!ok) {
               await AuthProvider.instance.v1logout();
               V1ApiManager.onUnauthorized?.call();
@@ -223,13 +235,22 @@ class V1ApiManager {
             return _unauthorizedResponse('Session expired.');
           }
         }
+      } else if (isSoon) {
+        if (rememberMe && hasRefresh) {
+          final ok = await _refreshWithLock();
+          if (ok) {
+            tokenCandidate = await _storage.readSecureData('authToken');
+          } else {
+            debugPrint(
+                '[AUTH] preflight: expiring soon & refresh FAILED → continue with current token');
+          }
+        }
       }
 
       if (tokenCandidate == null || tokenCandidate.isEmpty) {
         await AuthProvider.instance.v1logout();
         return _unauthorizedResponse('Authentication token is missing.');
       }
-
       token = tokenCandidate;
     }
 
@@ -292,20 +313,49 @@ class V1ApiManager {
         'code': response.statusCode,
       };
     } on DioException catch (e) {
-      // 401 yakala → remember'a göre davran
+      // —— 401 handling
       if (e.response?.statusCode == 401 && requiresAuth && !retried) {
         final remembered =
             (await _storage.readSecureData('rememberMe')) == 'true';
+        debugPrint(
+            '[AUTH] 401 caught. remembered=$remembered retried=$retried');
 
         if (remembered) {
-          // remember=true → sessiz refresh + 1 kez retry
+          // try refresh first
           final ok = await _refreshWithLock();
           if (!ok) {
-            await AuthProvider.instance.v1logout();
-            V1ApiManager.onUnauthorized?.call();
-            return _unauthorizedResponse(
-                'Session expired. Please log in again.');
+            // 🔁 NEW: as a last chance, offer re-auth popup instead of immediate logout
+            final ctx = context ?? V1ApiManager.navKey?.currentContext;
+            if (ctx != null) {
+              final reok = await _reauthWithLock(ctx);
+              if (!reok) {
+                debugPrint('[AUTH] 401: refresh FAIL & reauth FAIL → logout');
+                await AuthProvider.instance.v1logout();
+                V1ApiManager.onUnauthorized?.call();
+                return _unauthorizedResponse('Session expired.');
+              }
+              // re-auth ok → retry once
+              return await call(
+                module: module,
+                action: action,
+                params: params,
+                requiresAuth: requiresAuth,
+                context: context,
+                file: file,
+                fileType: fileType,
+                fileName: fileName,
+                onProgress: onProgress,
+                retried: true,
+              );
+            } else {
+              debugPrint('[AUTH] 401: refresh FAIL & no context → logout');
+              await AuthProvider.instance.v1logout();
+              V1ApiManager.onUnauthorized?.call();
+              return _unauthorizedResponse('Session expired.');
+            }
           }
+
+          // refresh ok → retry once
           return await call(
             module: module,
             action: action,
@@ -319,10 +369,12 @@ class V1ApiManager {
             retried: true,
           );
         } else {
-          // remember=false → şifre popup (context varsa)
-          if (context != null) {
-            final ok = await _reauthWithLock(context);
+          // remember=false → password popup
+          final ctx = context ?? V1ApiManager.navKey?.currentContext;
+          if (ctx != null) {
+            final ok = await _reauthWithLock(ctx);
             if (!ok) {
+              debugPrint('[AUTH] 401: reauth FAIL → logout');
               await AuthProvider.instance.v1logout();
               V1ApiManager.onUnauthorized?.call();
               return _unauthorizedResponse('Session expired.');
@@ -340,6 +392,7 @@ class V1ApiManager {
               retried: true,
             );
           } else {
+            debugPrint('[AUTH] 401: no context → logout');
             await AuthProvider.instance.v1logout();
             V1ApiManager.onUnauthorized?.call();
             return _unauthorizedResponse('Session expired.');
@@ -372,14 +425,11 @@ class V1ApiManager {
     try {
       final parts = token.split('.');
       if (parts.length != 3) return true;
-
       final payload =
           utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
       final payloadMap = json.decode(payload);
       final exp = payloadMap['exp'];
-
       if (exp == null) return true;
-
       final expiryDate = DateTime.fromMillisecondsSinceEpoch(exp * 1000);
       return DateTime.now().isAfter(expiryDate);
     } catch (_) {
@@ -392,12 +442,10 @@ class V1ApiManager {
     try {
       final parts = token.split('.');
       if (parts.length != 3) return true;
-
       final payload =
           utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
       final Map<String, dynamic> decoded = json.decode(payload);
       final int exp = decoded['exp'] ?? 0;
-
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       return (exp - now) <= bufferInSeconds;
     } catch (e) {
@@ -406,12 +454,11 @@ class V1ApiManager {
     }
   }
 
-  // ——— Moderation convenience ———
-
+  // ——— Moderation helpers ———
   Future<Map<String, dynamic>> moderationBlockUser({
     required int targetUserId,
     String? until, // 'YYYY-MM-DD HH:mm:ss'
-    int? durationHours, // alternatif
+    int? durationHours,
     String? reason,
   }) async {
     return await call(
@@ -432,7 +479,14 @@ class V1ApiManager {
     return await call(
       module: 'moderation',
       action: 'unblockUser',
-      params: {'target_user_id': targetUserId},
+      params: {
+        'target_user_id': targetUserId,
+        'blocked_until': DateTime(1970, 1, 1)
+            .toIso8601String()
+            .replaceFirst('T', ' ')
+            .split('.')
+            .first,
+      },
     );
   }
 
@@ -520,14 +574,14 @@ class V1ApiManager {
                       await _storage.writeSecureData(
                           'authToken', (res['token'] ?? '').toString());
                       if (res['refresh_token'] != null) {
-                        await _storage.writeSecureData('refreshToken',
-                            (res['refresh_token'] ?? '').toString());
+                        await _storage.writeSecureData(
+                          'refreshToken',
+                          (res['refresh_token'] ?? '').toString(),
+                        );
                       }
                       await _storage.writeSecureData('rememberMe', 'false');
-
                       if (ctx.mounted) Navigator.pop(ctx, true);
-                      // ÖNEMLİ: Erken dön → finally’de setState çalışmasın
-                      return;
+                      return; // try/finally'de finally sonrası setState koruması
                     } else {
                       if (!ctx.mounted) return;
                       setState(() => error =

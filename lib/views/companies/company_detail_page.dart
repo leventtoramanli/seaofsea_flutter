@@ -3,47 +3,70 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
+import 'package:seaofsea/services/v1/company_service.dart';
+
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
+
 import 'package:seaofsea/views/companies/company_contact_info.dart';
 import 'package:seaofsea/views/companies/company_dashboard.dart';
 import 'package:seaofsea/views/companies/company_helpers.dart';
+import 'package:seaofsea/views/companies/controllers/company_detail_controller.dart';
+import 'package:seaofsea/views/companies/utils/role_caps.dart';
+import 'package:seaofsea/views/companies/widgets/company_header.dart';
+import 'package:seaofsea/views/companies/widgets/company_people_sheet.dart';
+import 'package:seaofsea/views/companies/widgets/states/error_view.dart';
+import 'package:seaofsea/views/companies/widgets/states/loading_skeleton.dart';
+
 import 'package:seaofsea/widgets/custon_scaffold.dart';
 import 'package:seaofsea/widgets/online_images.dart';
 
-class CompanyShowcasePage extends StatefulWidget {
+class CompanyDetailPage extends StatefulWidget {
   final Map<String, dynamic> companyData;
-
-  const CompanyShowcasePage({super.key, required this.companyData});
+  const CompanyDetailPage({super.key, required this.companyData});
 
   @override
-  State<CompanyShowcasePage> createState() => _CompanyShowcasePageState();
+  State<CompanyDetailPage> createState() => _CompanyDetailPageState();
 }
 
-class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
+class _CompanyDetailPageState extends State<CompanyDetailPage> {
   bool _isLoadingRole = true;
-  late Map<String, List<Map<String, String>>> _contactInfo;
-  String? _userRole;
-  int _currentPageIndex = 0;
+  String? _userRole; // admin|editor|viewer|follower|none
 
+  late Map<String, List<Map<String, String>>> _contactInfo;
+  late CompanyDetailController _c;
+  late CompanyService _companyService;
+
+  int _currentPageIndex = 0;
   bool get isAdmin => _userRole == 'admin';
   bool get isEditor => _userRole == 'editor';
   bool get isViewer => _userRole == 'viewer';
   bool get isFollower => _userRole == 'follower';
   bool get isEmployee => isAdmin || isEditor || isViewer;
+  bool _typesSaving = false;
+
   List<Map<String, dynamic>> _allCompanyTypes = [];
   List<int> _selectedCompanyTypeIds = [];
+  late Map<String, dynamic> _company;
+
+  String? _errorText;
 
   @override
   void initState() {
     super.initState();
-    _fetchUserRole();
-    _fetchCompanyDetails();
-    _fetchCompanyTypes(fetchAll: false);
-    final types = widget.companyData['company_type_ids'];
-    if (types != null && types is List) {
-      _selectedCompanyTypeIds = List<int>.from(types);
+    _company = Map<String, dynamic>.from(widget.companyData);
+
+    // type_ids (liste payload’ından)
+    final t = widget.companyData['type_ids'] ??
+        widget.companyData['company_type_ids'];
+    if (t is List) {
+      _selectedCompanyTypeIds = t
+          .map((e) => int.tryParse(e.toString()) ?? 0)
+          .where((e) => e > 0)
+          .toList();
     }
+
+    // contact_info parse (liste payload’ından)
     final rawContactInfo = widget.companyData['contact_info'];
     try {
       dynamic decoded;
@@ -54,129 +77,70 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
             ? jsonDecode(rawContactInfo)
             : rawContactInfo;
       }
-
       _contactInfo = parseContactInfo(decoded);
-      debugPrint('✅ Parsed contact_info: ${jsonEncode(_contactInfo)}');
-    } catch (e) {
-      debugPrint('❌ Contact info parse error: $e');
+    } catch (_) {
       _contactInfo = {};
     }
+
+    final v1 = context.read<V1ApiManager>();
+    _companyService = CompanyService(v1);
+    _c = CompanyDetailController(service: _companyService);
+
+    _c.addListener(() {
+      setState(() {
+        _isLoadingRole = _c.loading;
+        _userRole = _c.role;
+        _company = {..._company, ..._c.company};
+        _contactInfo = _c.contactInfo;
+        _allCompanyTypes = _c.allTypes;
+        _selectedCompanyTypeIds = _c.selectedTypeIds;
+        _errorText = _c.error;
+        // Not: _currentPageIndex'i şimdilik controller’dan yönetmiyoruz.
+      });
+    });
+
+    final companyId = _company['id'] ?? _company['company_id'];
+    _c.init(companyId, initialTypeIds: _selectedCompanyTypeIds);
+
+    // DİKKAT: Controller zaten tüm veriyi çekiyor.
+    // Aşağıdaki üç satır kaldırıldı ki iki kez yükleme olmasın.
+    // _fetchUserRole();
+    // _fetchCompanyDetails();
+    // _fetchCompanyTypes(fetchAll: false);
+  }
+
+  // --- Safe helpers ---
+  List<Map<String, dynamic>> _parseItems(dynamic data) {
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    if (data is Map && data['items'] is List) {
+      final items = data['items'] as List;
+      return items
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return <Map<String, dynamic>>[];
   }
 
   Future<void> _fetchCompanyDetails() async {
-    final api = context.read<ApiManager>();
-    final companyId = widget.companyData['id'];
-
-    final response = await api.post(context, 'get_company_detail', {
-      'company_id': companyId,
-    });
-
-    if (response['success'] == true && response['data'] is Map) {
-      final fullData = response['data'];
-
-      try {
-        final decodedContactInfo = fullData['contact_info'] is String
-            ? jsonDecode(fullData['contact_info'])
-            : fullData['contact_info'] ?? {};
-
-        setState(() {
-          _contactInfo = parseContactInfo(decodedContactInfo);
-          final rawTypes = fullData['company_type_ids'];
-          List<int> parsedTypes = [];
-
-          if (rawTypes != null) {
-            if (rawTypes is String) {
-              try {
-                final decoded = jsonDecode(rawTypes);
-                if (decoded is List) {
-                  parsedTypes = decoded
-                      .map<int>((e) => int.tryParse(e.toString()) ?? 0)
-                      .where((e) => e > 0)
-                      .toList();
-                }
-              } catch (e) {
-                debugPrint('❌ Failed to decode company_type_ids string: $e');
-              }
-            } else if (rawTypes is List) {
-              parsedTypes = rawTypes
-                  .map<int>((e) => int.tryParse(e.toString()) ?? 0)
-                  .where((e) => e > 0)
-                  .toList();
-            }
-          }
-
-          setState(() {
-            _selectedCompanyTypeIds = parsedTypes;
-          });
-        });
-        debugPrint('📦 Company detail fetched: ${jsonEncode(_contactInfo)}');
-      } catch (e) {
-        debugPrint('❌ contact_info parse error: $e');
-      }
-    } else {
-      debugPrint('❌ Failed to fetch full company data');
-    }
+    final companyId = _company['id'] ?? _company['company_id'];
+    await _c.refreshAll(companyId);
   }
 
   Future<void> _fetchUserRole() async {
-    final api = context.read<ApiManager>();
-
-    final response = await api.post(context, 'get_user_company_role', {
-      'company_id': widget.companyData['id'],
-    });
-
-    if (response['success'] == true && response['data']?['role'] != null) {
-      setState(() {
-        _userRole = response['data']['role'];
-        _isLoadingRole = false;
-      });
-    } else {
-      setState(() {
-        _userRole = 'none';
-        _isLoadingRole = false;
-      });
-    }
+    final companyId = _company['id'] ?? _company['company_id'];
+    await _c.refreshAll(companyId);
   }
 
   Future<void> _fetchCompanyTypes({bool fetchAll = false}) async {
-    final api = context.read<ApiManager>();
-    final Map<String, dynamic> requestData = {};
-
-    if (!fetchAll && _selectedCompanyTypeIds.isNotEmpty) {
-      requestData['filter_ids'] = _selectedCompanyTypeIds;
-    }
-
-    try {
-      final response =
-          await api.post(context, 'get_company_types', requestData);
-      debugPrint('Company Types: ${response['data']}');
-
-      if (response['success'] == true && response['data'] is List) {
-        final items = response['data'] as List;
-        final safeList = items
-            .where((e) => e is Map && e['id'] != null && e['name'] != null)
-            .cast<Map<String, dynamic>>()
-            .toList();
-
-        setState(() {
-          _allCompanyTypes = safeList;
-        });
-
-        if (safeList.isEmpty) {
-          debugPrint('ℹ️ No company types found.');
-        }
-      } else {
-        debugPrint('❌ Invalid or missing data in company types response.');
-        setState(() {
-          _allCompanyTypes = [];
-        });
-      }
-    } catch (e) {
-      debugPrint('❌ Exception while fetching company types: $e');
-      setState(() {
-        _allCompanyTypes = [];
-      });
-    }
+    final companyId = _company['id'] ?? _company['company_id'];
+    // fetchAll paramını şimdilik gözardı ediyoruz; controller zaten seçili ID’lere göre getiriyor.
+    await _c.refreshAll(companyId);
   }
 
   void _handleAddCompanyType() async {
@@ -187,156 +151,166 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
       context: context,
       allTypes: _allCompanyTypes,
       selectedIds: _selectedCompanyTypeIds,
-      onSelectedUpdated: (updatedIds) {
-        setState(() {
-          _selectedCompanyTypeIds = updatedIds;
-        });
-        updateCompanyTypesOnServer(
-          context,
-          updatedIds,
-          widget.companyData['id'],
-        );
+      onSelectedUpdated: (updatedIds) async {
+        await _updateCompanyTypesOptimistic(updatedIds);
       },
     );
   }
 
+  Future<void> _updateCompanyTypesOptimistic(List<int> newIds) async {
+    final companyId = _company['id'] ?? _company['company_id'];
+    final prevIds = List<int>.from(_selectedCompanyTypeIds);
+    bool undone = false;
+
+    // 1) UI’yi anında güncelle
+    setState(() {
+      _selectedCompanyTypeIds = newIds;
+      _typesSaving = true;
+    });
+
+    // 2) Snackbar + Undo
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        content: const Text('Company types updated'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            undone = true;
+            setState(() => _selectedCompanyTypeIds = prevIds);
+            // Sunucuya geri almayı gönder
+            await _c.saveTypes(companyId, prevIds);
+          },
+        ),
+      ),
+    );
+
+    // 3) Sunucuya kaydı gönder
+    final ok = await _c.saveTypes(companyId, newIds);
+    setState(() => _typesSaving = false);
+
+    if (!ok) {
+      // Kaydetme başarısız → geri al ve kullanıcıyı bilgilendir
+      setState(() => _selectedCompanyTypeIds = prevIds);
+      messenger.showSnackBar(
+        SnackBar(content: Text('❌ ${'Update failed. Reverted.'}')),
+      );
+      return;
+    }
+
+    // 4) Snackbar kapanana kadar bekle; Undo’ya basıldıysa yukarıda zaten geri alındı
+    await controller.closed;
+
+    // Not: Undo’ya basılmadıysa burada ekstra bir şey yapmamıza gerek yok.
+  }
+
   Future<void> _showModalC(
-      BuildContext context, String endpoint, String title) async {
-    final api = context.read<ApiManager>();
+    BuildContext context,
+    String action,
+    String title,
+  ) async {
+    final companyId =
+        widget.companyData['id'] ?? widget.companyData['company_id'];
+
+    // Minimal: service varsa onu kullan; yoksa v1.call ile de olurdu.
+    Future<List<Map<String, dynamic>>> loader() async {
+      if (action == 'get_company_followers') {
+        return await _companyService.getCompanyFollowers(companyId);
+      } else if (action == 'members_list') {
+        return await _companyService.getCompanyMembers(companyId);
+      } else {
+        // Beklenmeyen action → boş liste
+        return <Map<String, dynamic>>[];
+      }
+    }
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) {
-        return FutureBuilder(
-          future: api.post(context, endpoint, {
-            'company_id': widget.companyData['id'],
-          }),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            } else if (snapshot.hasError) {
-              return const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: Text('Error loading data.')),
-              );
-            } else if (snapshot.hasData &&
-                snapshot.data is Map<String, dynamic>) {
-              final data = snapshot.data as Map<String, dynamic>;
-              final items = data['data'] ?? [];
-              if (items.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(child: Text('No have any followers.')),
-                );
-              }
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(title,
-                        style: Theme.of(context).textTheme.titleLarge),
-                  ),
-                  Divider(),
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final user = items[index];
-                        final hasProfileImage = user['user_image'] != null &&
-                            user['user_image'].toString().isNotEmpty;
-
-                        return ListTile(
-                          leading: hasProfileImage
-                              ? OnlineImage(
-                                  imagePath: 'images/user/user/',
-                                  imageName: user['user_image'],
-                                  sizeW: 40,
-                                  rounded: true,
-                                  border: true,
-                                )
-                              : const Icon(Icons.person),
-                          title: SelectableText(
-                            '${user['name'] ?? ''} ${user['surname'] ?? ''}'
-                                    .trim()
-                                    .isEmpty
-                                ? 'Unnamed'
-                                : '${user['name'] ?? ''} ${user['surname'] ?? ''}'
-                                    .trim(),
-                          ),
-                          subtitle: Text(user['rank'] ?? '-'),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              );
-            } else {
-              return const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: Text('Unexpected error.')),
-              );
-            }
-          },
+      builder: (ctx) {
+        return CompanyPeopleSheet(
+          title: title,
+          load: loader,
+          imagePath: 'uploads/user/user/',
+          imageNameKey: 'user_image',
+          nameKey: 'name',
+          surnameKey: 'surname',
+          subtitleKeys: const ['rank', 'role'],
         );
       },
     );
   }
 
+  Future<void> _retryAll() async {
+    final companyId = _company['id'] ?? _company['company_id'];
+    await _c.refreshAll(companyId);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool isDesktop = MediaQuery.of(context).size.width > 900;
-    final bool isTablet = MediaQuery.of(context).size.width > 600 && !isDesktop;
+    final isDesktop = MediaQuery.of(context).size.width > 900;
+    final isTablet = MediaQuery.of(context).size.width > 600 && !isDesktop;
+
     if (_isLoadingRole || _userRole == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return CustomScaffold(
+        title: _company['name'] ?? 'Company',
+        body: const LoadingSkeleton(),
+        floatingActionButton: _buildBadges(),
       );
     }
 
-    final bool isAdminOrEditor = isAdmin || isEditor;
+    final caps = RoleCaps.from(_userRole);
+    final isAdminOrEditor = caps.canSeeDashboard;
+    final companyId =
+        widget.companyData['id'] ?? widget.companyData['company_id'];
+
+    if (_errorText != null && _errorText!.isNotEmpty) {
+      return CustomScaffold(
+        title: _company['name'] ?? 'Company',
+        body: ErrorView(message: _errorText!, onRetry: _retryAll),
+        floatingActionButton: _buildBadges(),
+      );
+    }
 
     return CustomScaffold(
-      title: widget.companyData['name'] ?? 'Company Name',
+      title: _company['name'] ?? 'Company',
       floatingActionButton: _buildBadges(),
       body: isAdminOrEditor
           ? IndexedStack(
               index: _currentPageIndex,
               children: [
                 CompanyDashboard(
-                  goToContactInfo: () {
-                    setState(() => _currentPageIndex = 1);
-                  },
-                  companyId: widget.companyData['id'],
+                  goToContactInfo: () => setState(() => _currentPageIndex = 1),
+                  companyId: companyId,
                 ),
                 CompanyContactInfo(
-                  header: buildHeader(
-                    context: context,
-                    isDesktop: isDesktop,
-                    isTablet: isTablet,
-                    isAdmin: isAdmin,
-                    isEditor: isEditor,
-                    companyId: widget.companyData['id'],
-                    logo: widget.companyData['logo'],
+                  header: CompanyHeader(
+                    company: _company,
+                    logoWidget:
+                        buildCompanyLogo(context, companyId, _company['logo']),
                     adminButtons: buildAdminButtons(
-                        context, widget.companyData['id'], widget.companyData),
+                      context,
+                      companyId,
+                      _company,
+                      onChanged: () async {
+                        await _retryAll();
+                      },
+                    ),
                     actionButtons: buildActionButtons(
                       context,
-                      isViewer,
-                      isFollower,
-                      isEmployee,
-                      widget.companyData['id'],
+                      caps.isViewer,
+                      caps.isFollower,
+                      caps.isEmployee,
+                      companyId,
                     ),
                   ),
                   companyTypeSection: buildCompanyTypeSection(
                     _allCompanyTypes,
                     _selectedCompanyTypeIds,
-                    isAdmin,
-                    isEditor,
+                    caps.isAdmin,
+                    caps.isEditor,
                     _handleAddCompanyType,
                   ),
                   contactSection: buildContactSection(
@@ -349,13 +323,15 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
                         themeProvider: context.read<ThemeProvider>(),
                         category: category,
                         contactInfo: _contactInfo,
-                        onUpdate: (updatedInfo) {
+                        onUpdate: (updatedInfo) async {
                           setState(() => _contactInfo = updatedInfo);
                           updateContactInfoOnServer(
                             context: context,
-                            companyId: widget.companyData['id'],
+                            companyId: companyId,
                             contactInfo: updatedInfo,
                           );
+                          final cid = companyId;
+                          await _c.saveContactInfo(cid, updatedInfo);
                         },
                       );
                     },
@@ -366,23 +342,29 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
                         category: category,
                         item: item,
                         contactInfo: _contactInfo,
-                        onUpdate: (updatedInfo) {
+                        onUpdate: (updatedInfo) async {
                           setState(() => _contactInfo = updatedInfo);
                           updateContactInfoOnServer(
                             context: context,
-                            companyId: widget.companyData['id'],
+                            companyId: companyId,
                             contactInfo: updatedInfo,
                           );
+                          // Controller senkronizasyonu — 5b
+                          final cid = companyId;
+                          await _c.saveContactInfo(cid, updatedInfo);
                         },
                       );
                     },
-                    onDeletePressed: (category, item, updatedInfo) {
+                    onDeletePressed: (category, item, updatedInfo) async {
                       setState(() => _contactInfo = updatedInfo);
                       updateContactInfoOnServer(
                         context: context,
-                        companyId: widget.companyData['id'],
+                        companyId: companyId,
                         contactInfo: updatedInfo,
                       );
+                      // Controller senkronizasyonu — 5b
+                      final cid = companyId;
+                      await _c.saveContactInfo(cid, updatedInfo);
                     },
                     onTap: (category, value) =>
                         _handleContactTap(category, value),
@@ -391,29 +373,31 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
               ],
             )
           : CompanyContactInfo(
-              header: buildHeader(
-                context: context,
-                isDesktop: isDesktop,
-                isTablet: isTablet,
-                isAdmin: isAdmin,
-                isEditor: isEditor,
-                companyId: widget.companyData['id'],
-                logo: widget.companyData['logo'],
+              header: CompanyHeader(
+                company: _company,
+                logoWidget:
+                    buildCompanyLogo(context, companyId, _company['logo']),
                 adminButtons: buildAdminButtons(
-                    context, widget.companyData['id'], widget.companyData),
+                  context,
+                  companyId,
+                  _company,
+                  onChanged: () async {
+                    await _retryAll();
+                  },
+                ),
                 actionButtons: buildActionButtons(
                   context,
-                  isViewer,
-                  isFollower,
-                  isEmployee,
-                  widget.companyData['id'],
+                  caps.isViewer,
+                  caps.isFollower,
+                  caps.isEmployee,
+                  companyId,
                 ),
               ),
               companyTypeSection: buildCompanyTypeSection(
                 _allCompanyTypes,
                 _selectedCompanyTypeIds,
-                isAdmin,
-                isEditor,
+                caps.isAdmin,
+                caps.isEditor,
                 _handleAddCompanyType,
               ),
               contactSection: buildContactSection(
@@ -426,13 +410,15 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
                     themeProvider: context.read<ThemeProvider>(),
                     category: category,
                     contactInfo: _contactInfo,
-                    onUpdate: (updatedInfo) {
+                    onUpdate: (updatedInfo) async {
                       setState(() => _contactInfo = updatedInfo);
                       updateContactInfoOnServer(
                         context: context,
-                        companyId: widget.companyData['id'],
+                        companyId: companyId,
                         contactInfo: updatedInfo,
                       );
+                      final cid = companyId;
+                      await _c.saveContactInfo(cid, updatedInfo);
                     },
                   );
                 },
@@ -443,23 +429,28 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
                     category: category,
                     item: item,
                     contactInfo: _contactInfo,
-                    onUpdate: (updatedInfo) {
+                    onUpdate: (updatedInfo) async {
                       setState(() => _contactInfo = updatedInfo);
                       updateContactInfoOnServer(
                         context: context,
-                        companyId: widget.companyData['id'],
+                        companyId: companyId,
                         contactInfo: updatedInfo,
                       );
+                      // Controller senkronizasyonu — 5b
+                      final cid = companyId;
+                      await _c.saveContactInfo(cid, updatedInfo);
                     },
                   );
                 },
-                onDeletePressed: (category, item, updatedInfo) {
+                onDeletePressed: (category, item, updatedInfo) async {
                   setState(() => _contactInfo = updatedInfo);
                   updateContactInfoOnServer(
                     context: context,
-                    companyId: widget.companyData['id'],
+                    companyId: companyId,
                     contactInfo: updatedInfo,
                   );
+                  final cid = companyId;
+                  await _c.saveContactInfo(cid, updatedInfo);
                 },
                 onTap: (category, value) => _handleContactTap(category, value),
               ),
@@ -469,39 +460,33 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
 
   Future<void> _handleContactTap(String category, String value) async {
     Uri? uri;
-
     switch (category) {
       case 'phones':
-        // Bu durumda _showPhoneOptions çağrılıyor (zaten tanımlı)
         showPhoneOptions(context, value);
         return;
-
       case 'emails':
         uri = Uri(scheme: 'mailto', path: value);
         break;
-
       case 'websites':
         uri = Uri.parse(value.startsWith('http') ? value : 'https://$value');
-        debugPrint('📦 Launching $uri');
         break;
-
       case 'addresses':
         final query =
             value.replaceAll('.', '').trim().replaceAll(RegExp(r'\s+'), '+');
         uri = Uri.parse('https://yandex.com/maps/?text=$query');
-        debugPrint('📦 Launching $query');
         break;
       default:
         return;
     }
-
     try {
       await launchDirectly(context, uri.toString());
     } catch (e) {
       debugPrint('❌ Failed to launch $uri: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cannot open $category')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cannot open $category')),
+        );
+      }
     }
   }
 
@@ -519,8 +504,7 @@ class _CompanyShowcasePageState extends State<CompanyShowcasePage> {
         const SizedBox(height: 8),
         FloatingActionButton.small(
           heroTag: 'employeesBadge',
-          onPressed: () =>
-              _showModalC(context, 'get_company_employees', 'Employees'),
+          onPressed: () => _showModalC(context, 'members_list', 'Employees'),
           child: const Icon(Icons.engineering),
         ),
       ],

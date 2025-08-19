@@ -2,28 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:seaofsea/services/v1/v1_api_manager.dart';
 
-class PermissionGate extends StatelessWidget {
-  final String permissionCode;
-  final int? companyId; // company scope; globals için null
+/// V1 permission kontrolü için hafif bir gate.
+/// Backend: module=permission, action=check
+/// Param adları: permission_code, company_id (opsiyonel)
+class V1PermissionGate extends StatelessWidget {
+  final String code;
+  final int? companyId;
   final Widget child;
   final bool wait;
 
-  const PermissionGate({
+  const V1PermissionGate({
     super.key,
-    required this.permissionCode,
+    required this.code,
     required this.child,
     this.companyId,
     this.wait = false,
   });
 
   static bool _extractAllowed(Map<String, dynamic> res) {
-    // Router "data" içine sarmış olabilir:
     final d = res['data'];
     if (d is Map && d['allowed'] != null) {
       final v = d['allowed'];
       return v == true || v == 1 || v == '1';
     }
-    // Bazı durumlarda handler direkt dönmüş olabilir:
     if (res['allowed'] != null) {
       final v = res['allowed'];
       return v == true || v == 1 || v == '1';
@@ -33,7 +34,7 @@ class PermissionGate extends StatelessWidget {
 
   static Future<bool> check({
     required BuildContext context,
-    required String permissionCode,
+    required String code,
     int? companyId,
   }) async {
     final v1 = context.read<V1ApiManager>();
@@ -41,7 +42,7 @@ class PermissionGate extends StatelessWidget {
       module: 'permission',
       action: 'check',
       params: {
-        'permission_code': permissionCode,
+        'permission_code': code,
         if (companyId != null) 'company_id': companyId,
       },
     );
@@ -51,13 +52,13 @@ class PermissionGate extends StatelessWidget {
     return false;
   }
 
-  Future<bool> _checkPermission(BuildContext context) async {
+  Future<bool> _check(BuildContext context) async {
     final v1 = context.read<V1ApiManager>();
     final res = await v1.call(
       module: 'permission',
       action: 'check',
       params: {
-        'permission_code': permissionCode,
+        'permission_code': code,
         if (companyId != null) 'company_id': companyId,
       },
     );
@@ -70,14 +71,14 @@ class PermissionGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<bool>(
-      future: _checkPermission(context),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+      future: _check(context),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
           return wait
               ? const Center(child: CircularProgressIndicator())
               : const SizedBox.shrink();
         }
-        return (snapshot.data == true) ? child : const SizedBox.shrink();
+        return (snap.data == true) ? child : const SizedBox.shrink();
       },
     );
   }

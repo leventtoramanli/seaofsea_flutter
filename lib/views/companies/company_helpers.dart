@@ -4,16 +4,17 @@ import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
-import 'package:seaofsea/utils/permission_gate.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
+import 'package:seaofsea/services/v1/v1_config.dart';
+import 'package:seaofsea/widgets/v1_permission_gate.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
-import 'package:seaofsea/views/companies/contact_field_definitions.dart';
+import 'package:seaofsea/views/companies/config/contact_field_definitions.dart';
 import 'package:seaofsea/widgets/custom_button.dart';
 import 'package:seaofsea/widgets/custom_form_field.dart';
 import 'package:seaofsea/widgets/custom_image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Küçük icon butonlar için ortak yapı (ör. admin ayar butonları)
+/// Küçük icon butonlar için ortak yapı
 Widget buildIconButton(IconData icon, VoidCallback onPressed, String tooltip) {
   return IconButton(
     icon: Icon(icon, size: 20),
@@ -22,42 +23,75 @@ Widget buildIconButton(IconData icon, VoidCallback onPressed, String tooltip) {
   );
 }
 
-/// Contact info ve diğer sekmeler için başlık satırı
+/// Bölüm başlığı
 Widget buildSectionTitle(BuildContext context, IconData icon, String title) {
-  return Row(
-    children: [
-      Icon(icon, size: 20),
-      const SizedBox(width: 8),
-      SelectableText(
-        title,
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-    ],
+  final cs = Theme.of(context).colorScheme;
+  return Padding(
+    padding: const EdgeInsets.only(top: 8, bottom: 4),
+    child: Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withAlpha(150),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: cs.onSurface,
+              ),
+        ),
+      ],
+    ),
   );
 }
-/// Contact info içeriğinde kullanılan ortak ListTile
+
+/// Contact info list tile
 Widget buildContactListTile({
   required String label,
   required String value,
   VoidCallback? onTap,
   List<Widget>? trailing,
 }) {
-  return ListTile(
-    dense: true,
-    contentPadding: EdgeInsets.zero,
-    title: Text(label),
-    subtitle: GestureDetector(
-      onTap: onTap,
-      child: SelectableText(
-        value,
-        style: const TextStyle(color: Colors.blue),
-      ),
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Builder(
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          tileColor: cs.surfaceContainerHighest.withAlpha(150),
+          title: Text(label),
+          subtitle: Text(
+            value,
+            style: const TextStyle(decoration: TextDecoration.underline),
+          ),
+          trailing: trailing != null
+              ? Row(mainAxisSize: MainAxisSize.min, children: trailing)
+              : null,
+          onTap: onTap,
+          onLongPress: () {
+            Clipboard.setData(ClipboardData(text: value));
+            ScaffoldMessenger.of(ctx).showSnackBar(
+              const SnackBar(content: Text('Copied to clipboard')),
+            );
+          },
+        );
+      },
     ),
-    trailing: trailing != null
-        ? Row(mainAxisSize: MainAxisSize.min, children: trailing)
-        : null,
   );
 }
+
 Widget buildHeader({
   required BuildContext context,
   required bool isDesktop,
@@ -75,7 +109,8 @@ Widget buildHeader({
       buildCompanyLogo(context, companyId, logo),
       Column(
         children: [
-          if ((isDesktop || isTablet) && (isAdmin || isEditor)) adminButtons,
+          // Rol bağımlılığını kaldırdık; izinler her butonun içinde kontrol ediliyor.
+          adminButtons,
           const SizedBox(height: 5),
           actionButtons,
         ],
@@ -84,16 +119,20 @@ Widget buildHeader({
   );
 }
 
-Widget buildCompanyLogo(BuildContext context, int companyId, String? existingLogo) {
+Widget buildCompanyLogo(
+  BuildContext context,
+  int companyId,
+  String? existingLogo,
+) {
   final imageUrl = (existingLogo != null && existingLogo.isNotEmpty)
-      ? '${Provider.of<ApiManager>(context, listen: false).baseUrl}/images/companies/logo/thumb/$existingLogo'
+      ? '${V1Config.baseUrl}uploads/images/companies/logo/$existingLogo'
       : null;
 
-  return FutureBuilder(
-    future: PermissionGate.check(
+  return FutureBuilder<bool>(
+    future: V1PermissionGate.check(
       context: context,
-      permissionCode: 'company.update_logo',
-      entityId: companyId,
+      code: 'company.update',
+      companyId: companyId,
     ),
     builder: (context, snapshot) {
       final hasPermission = snapshot.data == true;
@@ -109,49 +148,75 @@ Widget buildCompanyLogo(BuildContext context, int companyId, String? existingLog
         ishadow: true,
         canEdit: hasPermission,
         doUpload: hasPermission,
+
+        // Upload endpoint sende çalıştığı için aynı bırakıldı.
         uploadEndpoint: 'upload_image_general',
         uploadMeta: {
           'type': 'company',
-          'folder': 'images/companies/logo/',
+          'folder': 'uploads/images/companies/logo/',
           'prefix': 'c_$companyId',
           'thumb': 'true',
           'thumbSize': '128',
         },
+
         onUploaded: (uploadedFileName) async {
-          final api = Provider.of<ApiManager>(context, listen: false);
-          final updateResponse = await api.post(context, 'update_company', {
-            'company_id': companyId.toString(),
-            'logo': uploadedFileName,
-          });
-          if (updateResponse['success'] == true) {
-            // Bildirim göster ya da ilgili yeri güncelle
+          final v1 = context.read<V1ApiManager>();
+          final res = await v1.call(
+            module: 'company',
+            action: 'update',
+            params: {
+              'id': companyId, // dikkat: 'company_id' değil 'id'
+              'logo': uploadedFileName,
+            },
+          );
+          if (res['success'] == true && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Logo updated.')),
+            );
           }
         },
-        onImagePicked: (_, __) {}, // eski sistemde kullanılmıyor
+
+        onImagePicked: (_, __) {},
       );
     },
   );
 }
 
-Widget buildAdminButtons(BuildContext context, int companyId, Map<String, dynamic> companyData) {
+Widget buildAdminButtons(
+  BuildContext context,
+  int companyId,
+  Map<String, dynamic> companyData, {
+  VoidCallback? onChanged,
+}) {
   return Row(
     children: [
-      PermissionGate(
-        permissionCode: 'company.update',
-        entityId: companyId,
+      // Edit
+      V1PermissionGate(
+        code: 'company.update',
+        companyId: companyId,
         child: IconButton(
           icon: const Icon(Icons.edit),
-          onPressed: () => Navigator.pushNamed(
-            context,
-            '/update_company',
-            arguments: companyData,
-          ),
           tooltip: 'Edit Company',
+          onPressed: () async {
+            final updated = await Navigator.pushNamed(
+              context,
+              '/update_company',
+              arguments: companyData,
+            );
+            if (updated == true) {
+              onChanged?.call();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Company updated.')),
+              );
+            }
+          },
         ),
       ),
-      PermissionGate(
-        permissionCode: 'company.view_members',
-        entityId: companyId,
+
+      // Members
+      V1PermissionGate(
+        code: 'company.members.view',
+        companyId: companyId,
         child: IconButton(
           icon: const Icon(Icons.group),
           onPressed: () => Navigator.pushNamed(
@@ -162,9 +227,11 @@ Widget buildAdminButtons(BuildContext context, int companyId, Map<String, dynami
           tooltip: 'Manage Users',
         ),
       ),
-      PermissionGate(
-        permissionCode: 'company.settings',
-        entityId: companyId,
+
+      // Settings (izin: company.update)
+      V1PermissionGate(
+        code: 'company.update',
+        companyId: companyId,
         child: IconButton(
           icon: const Icon(Icons.settings),
           onPressed: () => Navigator.pushNamed(
@@ -175,10 +242,248 @@ Widget buildAdminButtons(BuildContext context, int companyId, Map<String, dynami
           tooltip: 'Company Settings',
         ),
       ),
+
+      // Üç nokta menüsü: hide / unhide / archive (company.update ile gate)
+      V1PermissionGate(
+        code: 'company.update',
+        companyId: companyId,
+        child: PopupMenuButton<_CompanyAdminAction>(
+          icon: const Icon(Icons.more_vert),
+          onSelected: (act) => _handleAdminAction(
+            context: context,
+            action: act,
+            companyId: companyId,
+            companyName: (companyData['name'] ?? '').toString(),
+            onChanged: onChanged,
+          ),
+          itemBuilder: (ctx) => <PopupMenuEntry<_CompanyAdminAction>>[
+            const PopupMenuItem(
+              value: _CompanyAdminAction.hide,
+              child: ListTile(
+                leading: Icon(Icons.visibility_off),
+                title: Text('Hide'),
+              ),
+            ),
+            const PopupMenuItem(
+              value: _CompanyAdminAction.unhide,
+              child: ListTile(
+                leading: Icon(Icons.visibility),
+                title: Text('Unhide'),
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: _CompanyAdminAction.archive,
+              child: ListTile(
+                leading: Icon(Icons.archive_outlined),
+                title: Text('Archive (soft delete)'),
+              ),
+            ),
+            // Hard delete: ayrı izin kontrolü (company.delete.hard)
+            PopupMenuItem<_CompanyAdminAction>(
+              enabled: false, // içerde FutureBuilder ile kontrol
+              child: FutureBuilder<bool>(
+                future: V1PermissionGate.check(
+                  context: ctx,
+                  code: 'company.delete.hard',
+                  companyId: companyId,
+                ),
+                builder: (c, snap) {
+                  final allowed = snap.data == true;
+                  return ListTile(
+                    enabled: allowed,
+                    leading:
+                        const Icon(Icons.delete_forever, color: Colors.red),
+                    title: const Text('Delete permanently',
+                        style: TextStyle(color: Colors.red)),
+                    onTap: allowed
+                        ? () {
+                            Navigator.pop(c); // menüyü kapat
+                            _handleAdminAction(
+                              context: context,
+                              action: _CompanyAdminAction.deleteHard,
+                              companyId: companyId,
+                              companyName:
+                                  (companyData['name'] ?? '').toString(),
+                              onChanged: onChanged,
+                            );
+                          }
+                        : null,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     ],
   );
 }
-Widget buildActionButtons(BuildContext context, bool isViewer, bool isFollower, bool isEmployee, int companyId) {
+
+enum _CompanyAdminAction { hide, unhide, archive, deleteHard }
+
+Future<void> _handleAdminAction({
+  required BuildContext context,
+  required _CompanyAdminAction action,
+  required int companyId,
+  required String companyName,
+  VoidCallback? onChanged,
+}) async {
+  final v1 = context.read<V1ApiManager>();
+
+  Future<bool> confirm(String title, String body) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(title),
+            content: Text(body),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  void okSnack(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  void errSnack(String m) => ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text('❌ $m')));
+
+  switch (action) {
+    case _CompanyAdminAction.hide:
+      if (!await confirm('Hide company',
+          'This will make "$companyName" invisible. Continue?')) {
+        return;
+      }
+      final resHide = await v1.call(
+        module: 'company',
+        action: 'hide',
+        params: {'company_id': companyId},
+      );
+      if (resHide['success'] == true) {
+        okSnack('Company hidden.');
+        onChanged?.call();
+        Navigator.maybePop(context);
+      } else {
+        errSnack(resHide['message'] ?? 'Hide failed.');
+      }
+      break;
+
+    case _CompanyAdminAction.unhide:
+      if (!await confirm(
+          'Unhide company', 'Make "$companyName" visible again?')) {
+        return;
+      }
+      final resUnhide = await v1.call(
+        module: 'company',
+        action: 'unhide',
+        params: {'company_id': companyId},
+      );
+      if (resUnhide['success'] == true) {
+        okSnack('Company visible.');
+        onChanged?.call();
+      } else {
+        errSnack(resUnhide['message'] ?? 'Unhide failed.');
+      }
+      break;
+
+    case _CompanyAdminAction.archive:
+      if (!await confirm('Archive company',
+          'This will disable the company and mark it as deleted (soft). Continue?')) {
+        return;
+      }
+      final resArch = await v1.call(
+        module: 'company',
+        action: 'archive',
+        params: {'company_id': companyId},
+      );
+      final bool ok =
+          (resArch['success'] == true) || (resArch['data']?['deleted'] == true);
+      if (ok) {
+        okSnack('Company archived.');
+        Navigator.maybePop(context);
+      } else {
+        errSnack(resArch['message'] ?? 'Archive failed.');
+      }
+      break;
+
+    case _CompanyAdminAction.deleteHard:
+      final phraseCtl = TextEditingController();
+      final passCtl = TextEditingController();
+      final okDel = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return AlertDialog(
+            title: const Text('Delete permanently'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SelectableText(
+                    'Type the phrase below to confirm:\n\nDELETE $companyName'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: phraseCtl,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm phrase',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passCtl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Your password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      );
+      if (okDel != true) return;
+
+      final resDel = await v1.call(
+        module: 'company',
+        action: 'delete',
+        params: {
+          'company_id': companyId,
+          'confirm_phrase': phraseCtl.text.trim(),
+          'password': passCtl.text,
+        },
+      );
+      if (resDel['success'] == true) {
+        okSnack('Company scheduled for deletion.');
+        Navigator.maybePop(context);
+      } else {
+        errSnack(resDel['message'] ?? 'Delete failed.');
+      }
+      break;
+  }
+}
+
+Widget buildActionButtons(BuildContext context, bool isViewer, bool isFollower,
+    bool isEmployee, int companyId) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -206,7 +511,6 @@ Widget buildActionButtons(BuildContext context, bool isViewer, bool isFollower, 
     ],
   );
 }
-
 
 Map<String, List<Map<String, String>>> parseContactInfo(dynamic raw) {
   if (raw == null || raw is! Map) return {};
@@ -242,8 +546,10 @@ Future<void> handleAddCompanyType({
           child: DropdownSearch<Map<String, dynamic>>.multiSelection(
             items: allTypes,
             selectedItems: selectedIds
-                .map((id) =>
-                    allTypes.firstWhere((t) => t['id'] == id, orElse: () => {}))
+                .map((id) => allTypes.firstWhere(
+                      (t) => t['id'] == id,
+                      orElse: () => {},
+                    ))
                 .where((e) => e.isNotEmpty)
                 .toList(),
             itemAsString: (item) => item['name'] ?? 'Unnamed',
@@ -270,11 +576,13 @@ Future<void> handleAddCompanyType({
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Save')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Save'),
+          ),
         ],
       );
     },
@@ -286,15 +594,19 @@ Future<void> updateCompanyTypesOnServer(
   List<int> selectedIds,
   int companyId,
 ) async {
-  final api = context.read<ApiManager>();
-  final response = await api.post(context, 'update_company', {
-    'company_id': companyId,
-    'company_type_ids': selectedIds,
-  });
+  final v1 = context.read<V1ApiManager>();
+  final res = await v1.call(
+    module: 'company',
+    action: 'update',
+    params: {
+      'id': companyId,
+      'type_ids': selectedIds, // backend 'type_ids' bekliyor
+    },
+  );
 
-  final message = response['success'] == true
+  final message = res['success'] == true
       ? 'Company types updated successfully.'
-      : '❌ ${response['message'] ?? 'Update failed.'}';
+      : '❌ ${res['message'] ?? 'Update failed.'}';
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }
 
@@ -302,18 +614,35 @@ Future<void> fetchCompanyTypes({
   required BuildContext context,
   required Function(List<Map<String, dynamic>>) onFetched,
   List<int> filterIds = const [],
+  int perPage = 500, // <— eklendi
 }) async {
-  final api = context.read<ApiManager>();
-  final response = await api.post(context, 'get_company_types', {
-    if (filterIds.isNotEmpty) 'filter_ids': filterIds,
-  });
+  final v1 = context.read<V1ApiManager>();
+  final res = await v1.call(
+    module: 'company',
+    action: 'types',
+    params: {
+      if (filterIds.isNotEmpty) 'filter_ids': filterIds,
+      'perPage': perPage, // <— eklendi
+    },
+    requiresAuth: false,
+  );
 
-  if (response['success'] == true && response['data'] is List) {
-    final items = response['data'] as List;
+  if (res['success'] == true) {
+    final data = res['data'];
+    List items;
+    if (data is List) {
+      items = data;
+    } else if (data is Map && data['items'] is List) {
+      items = data['items'];
+    } else {
+      items = const [];
+    }
+
     final safeList = items
         .where((e) => e is Map && e['id'] != null && e['name'] != null)
         .cast<Map<String, dynamic>>()
         .toList();
+
     onFetched(safeList);
   } else {
     onFetched([]);
@@ -325,15 +654,23 @@ Future<void> updateContactInfoOnServer({
   required int companyId,
   required Map<String, List<Map<String, String>>> contactInfo,
 }) async {
-  final api = context.read<ApiManager>();
-  final response = await api.post(context, 'update_company', {
-    'company_id': companyId,
-    'contact_info': contactInfo,
-  });
-  final message = response['success'] == true
+  final v1 = context.read<V1ApiManager>();
+  final res = await v1.call(
+    module: 'company',
+    action: 'update',
+    params: {
+      'id': companyId, // 'company_id' değil
+      'contact_info': contactInfo,
+    },
+  );
+
+  final message = res['success'] == true
       ? 'Contact info updated successfully.'
       : 'Failed to update contact info.';
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  if (context.mounted) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
 }
 
 Future<void> handleContactTap(
@@ -366,7 +703,8 @@ Future<void> handleContactTap(
 Future<void> launchDirectly(BuildContext context, String url) async {
   try {
     if (Platform.isWindows) {
-      await Process.run('start', [url], runInShell: true);
+      // 'start' bir shell built-in; cmd üzerinden çağır.
+      await Process.run('cmd', ['/c', 'start', '', url]);
     } else if (Platform.isMacOS) {
       await Process.run('open', [url]);
     } else if (Platform.isLinux) {
@@ -380,8 +718,8 @@ Future<void> launchDirectly(BuildContext context, String url) async {
       throw UnsupportedError('Platform not supported');
     }
   } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Failed to launch: $url')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('❌ Failed to launch: $url')));
   }
 }
 
@@ -434,49 +772,123 @@ Future<void> showContactDialog({
   final valueController = TextEditingController(text: item?['value'] ?? '');
   final isEditMode = item != null;
 
+  String? errorText; // basit inline hata
+
+  bool validate(String value) {
+    final v = value.trim();
+    if (v.isEmpty) return false;
+
+    switch (category) {
+      case 'emails':
+        final email = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+        return email.hasMatch(v);
+      case 'phones':
+        // + başlasın, kalanlar digit/space/-
+        final phone = RegExp(r'^\+?[0-9\-\s]{6,}$');
+        return phone.hasMatch(v);
+      case 'websites':
+        // domain veya http(s) link basit kontrol
+        final web = RegExp(r'^(https?:\/\/)?([a-z0-9\-]+\.)+[a-z]{2,}(\S*)$',
+            caseSensitive: false);
+        return web.hasMatch(v);
+      default:
+        return v.isNotEmpty;
+    }
+  }
+
+  String normalize(String value) {
+    var v = value.trim();
+    switch (category) {
+      case 'phones':
+        if (!v.startsWith('+')) v = '+$v';
+        break;
+      case 'websites':
+        if (!v.startsWith('http')) v = 'https://$v';
+        break;
+      case 'emails':
+        v = v.toLowerCase();
+        break;
+    }
+    return v;
+  }
+
   await showDialog(
     context: context,
     builder: (context) {
-      return AlertDialog(
-        title: Text(
-            '${isEditMode ? "Edit" : "Add"} ${category[0].toUpperCase()}${category.substring(1)}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CustomFormField(
-              controller: labelController,
-              label: def['label'] ?? 'Label',
-              hint: def['hint'] ?? '',
-              icon: def['icon'] ?? const Icon(Icons.label),
-              validationMessage: 'Label cannot be empty',
-              maxLines: 1,
-              themeProvider: themeProvider,
-            ),
-            const SizedBox(height: 12),
-            CustomFormField(
-              controller: valueController,
-              label: def['valueLabel'] ?? 'Value',
-              hint: def['valueHint'] ?? '',
-              icon: def['valueIcon'] ?? const Icon(Icons.info),
-              validationMessage: 'Value cannot be empty',
-              isEmail: def['isEmail'] ?? false,
-              isPhone: def['isPhone'] ?? false,
-              isNumeric: def['isNumeric'] ?? false,
-              isUrl: def['isUrl'] ?? false,
-              maxLines: def['maxLines'] ?? 1,
-              themeProvider: themeProvider,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              final label = labelController.text.trim();
-              final value = valueController.text.trim();
-              if (label.isNotEmpty && value.isNotEmpty) {
+      return StatefulBuilder(builder: (context, setState) {
+        return AlertDialog(
+          title: Text(
+              '${isEditMode ? "Edit" : "Add"} ${category[0].toUpperCase()}${category.substring(1)}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CustomFormField(
+                controller: labelController,
+                label: def['label'] ?? 'Label',
+                hint: def['hint'] ?? '',
+                icon: def['icon'] ?? const Icon(Icons.label),
+                validationMessage: 'Label cannot be empty',
+                maxLines: 1,
+                themeProvider: themeProvider,
+              ),
+              const SizedBox(height: 12),
+              CustomFormField(
+                controller: valueController,
+                label: def['valueLabel'] ?? 'Value',
+                hint: def['valueHint'] ?? '',
+                icon: def['valueIcon'] ?? const Icon(Icons.info),
+                validationMessage: errorText ?? 'Value cannot be empty',
+                isEmail: def['isEmail'] ?? (category == 'emails'),
+                isPhone: def['isPhone'] ?? (category == 'phones'),
+                isNumeric: def['isNumeric'] ?? false,
+                isUrl: def['isUrl'] ?? (category == 'websites'),
+                maxLines: def['maxLines'] ?? 1,
+                themeProvider: themeProvider,
+              ),
+              if (errorText != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(errorText!,
+                      style: const TextStyle(color: Colors.red)),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () {
+                final label = labelController.text.trim();
+                final raw = valueController.text.trim();
+
+                if (label.isEmpty) {
+                  setState(() => errorText = 'Label cannot be empty');
+                  return;
+                }
+                if (!validate(raw)) {
+                  setState(() {
+                    switch (category) {
+                      case 'emails':
+                        errorText = 'Please enter a valid email address';
+                        break;
+                      case 'phones':
+                        errorText = 'Please enter a valid phone number';
+                        break;
+                      case 'websites':
+                        errorText = 'Please enter a valid website';
+                        break;
+                      default:
+                        errorText = 'Value cannot be empty';
+                    }
+                  });
+                  return;
+                }
+
+                final value = normalize(raw);
+
                 if (isEditMode) {
                   final index = contactInfo[category]?.indexOf(item);
                   if (index != null && index != -1) {
@@ -491,12 +903,12 @@ Future<void> showContactDialog({
                 }
                 onUpdate(contactInfo);
                 Navigator.pop(context);
-              }
-            },
-            child: Text(isEditMode ? 'Update' : 'Add'),
-          ),
-        ],
-      );
+              },
+              child: Text(isEditMode ? 'Update' : 'Add'),
+            ),
+          ],
+        );
+      });
     },
   );
 }
@@ -542,61 +954,82 @@ Widget buildCompanyTypeSection(
       .toList()
     ..sort((a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''));
 
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          const Icon(Icons.business, size: 20),
-          const SizedBox(width: 8),
-          const Text(
-            'Company Type:',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          if (isAdmin || isEditor)
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              tooltip: 'Add Company Type',
-              onPressed: onAddPressed,
-            ),
-        ],
-      ),
-      const SizedBox(height: 4),
-      if (selectedIds.isEmpty)
-        const Padding(
-          padding: EdgeInsets.only(left: 28),
-          child: Text('Not specified'),
-        )
-      else
-        Wrap(
-          spacing: 8,
-          children: sortedChips.map((matched) {
-            return Tooltip(
-              message: matched['description'] ?? '',
-              child: Chip(
-                label: Text(matched['name'] ?? 'Unknown'),
-              ),
-            );
-          }).toList(),
+  return Builder(
+    builder: (ctx) {
+      final cs = Theme.of(ctx).colorScheme;
+      return Card(
+        elevation: 0,
+        color: cs.surfaceContainerHighest,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: cs.outlineVariant),
         ),
-      const SizedBox(height: 16),
-    ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.business, size: 20),
+                  const SizedBox(width: 8),
+                  const Text('Company Type:',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  if (isAdmin || isEditor)
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      tooltip: 'Add Company Type',
+                      onPressed: onAddPressed,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              if (selectedIds.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(left: 28, bottom: 8),
+                  child: Text('Not specified'),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 8),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: -4,
+                    children: sortedChips.map((matched) {
+                      return Tooltip(
+                        message: matched['description'] ?? '',
+                        child: InputChip(
+                          label: Text(matched['name'] ?? 'Unknown'),
+                          onPressed: null,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    },
   );
 }
+
 Widget buildContactSection({
   required BuildContext context,
   required String userRole,
   required Map<String, List<Map<String, String>>> contactInfo,
   required void Function(String category) onAddPressed,
-  required void Function(String category, Map<String, String> item) onEditPressed,
+  required void Function(String category, Map<String, String> item)
+      onEditPressed,
   required void Function(
-      String category,
-      Map<String, String> item,
-      Map<String, List<Map<String, String>>> updatedInfo,
+    String category,
+    Map<String, String> item,
+    Map<String, List<Map<String, String>>> updatedInfo,
   ) onDeletePressed,
   required void Function(String category, String value) onTap,
 }) {
   final allCategories = ['phones', 'emails', 'addresses', 'websites'];
+  final isEditorOrAdmin = userRole == 'admin' || userRole == 'editor';
 
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -614,7 +1047,7 @@ Widget buildContactSection({
                 category[0].toUpperCase() + category.substring(1),
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              if (userRole == 'admin' || userRole == 'editor')
+              if (isEditorOrAdmin)
                 GestureDetector(
                   onTap: () => onAddPressed(category),
                   child: const Padding(
@@ -635,20 +1068,52 @@ Widget buildContactSection({
               final label = item['label'] ?? '';
               final value = item['value'] ?? '';
               final isPhone = category == 'phones';
-              final displayValue = isPhone
-                  ? (value.startsWith('+') ? value : '+$value')
-                  : value;
+              final displayValue =
+                  isPhone ? (value.startsWith('+') ? value : '+$value') : value;
+
+              // Hızlı aksiyonlar: Open + Copy
+              final quickActions = <Widget>[
+                buildIconButton(
+                  Icons.open_in_new,
+                  () => onTap(category, displayValue),
+                  'Open',
+                ),
+                buildIconButton(
+                  Icons.copy,
+                  () {
+                    Clipboard.setData(ClipboardData(text: displayValue));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Copied to clipboard')),
+                    );
+                  },
+                  'Copy',
+                ),
+              ];
+
+              // Admin/Editor için mevcut Edit/Delete’i de ekle
+              final editActions = isEditorOrAdmin
+                  ? <Widget>[
+                      buildIconButton(
+                        Icons.edit,
+                        () => onEditPressed(category, item),
+                        'Edit',
+                      ),
+                      buildIconButton(
+                        Icons.delete,
+                        () => onDeletePressed(category, item, contactInfo),
+                        'Delete',
+                      ),
+                    ]
+                  : <Widget>[];
 
               return buildContactListTile(
                 label: label,
                 value: displayValue,
                 onTap: () => onTap(category, displayValue),
-                trailing: (userRole == 'admin' || userRole == 'editor')
-                    ? [
-                        buildIconButton(Icons.edit, () => onEditPressed(category, item), 'Edit'),
-                        buildIconButton(Icons.delete, () => onDeletePressed(category, item, contactInfo), 'Delete'),
-                      ]
-                    : null,
+                trailing: [
+                  ...quickActions,
+                  ...editActions,
+                ],
               );
             }),
           const SizedBox(height: 12),
@@ -657,4 +1122,3 @@ Widget buildContactSection({
     }).toList(),
   );
 }
-

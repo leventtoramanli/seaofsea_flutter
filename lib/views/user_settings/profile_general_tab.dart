@@ -126,6 +126,7 @@ class _ProfileGeneralTabState extends State<ProfileGeneralTab> {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final apiManager = Provider.of<V1ApiManager>(context, listen: false);
 
+    // ignore: unused_local_variable
     final canUpdateOwn = context
         .select<PermissionProvider, bool>((p) => p.can('user.update_own'));
     final bool isVerified =

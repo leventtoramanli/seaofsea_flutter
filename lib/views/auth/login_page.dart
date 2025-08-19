@@ -3,7 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/services/v1/user_service.dart';
+
+import 'package:seaofsea/services/username_history.dart';
 import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/quotes.dart';
@@ -26,21 +27,42 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
+
+  // Varsayılan doldurma sende vardı, korudum.
   final TextEditingController emailController =
       TextEditingController(text: 'leventtoramanli@gmail.com');
   final TextEditingController passwordController =
       TextEditingController(text: '145326326lL');
 
+  List<String> _suggestions = [];
+
   final SecureStorage secureStorage = SecureStorage();
   final randomQuote = Quotes.getRandomQuote();
 
   bool _loadingLogin = false;
-  bool _loadingAnon  = false;
+  bool _loadingAnon = false;
   bool get _busy => _loadingLogin || _loadingAnon;
 
   bool wideScreen = false;
   double exWidth = 0.0;
   bool rememberMe = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsernames();
+  }
+
+  Future<void> _loadUsernames() async {
+    final items = await UsernameHistory.getAll();
+    if (!mounted) return;
+    setState(() => _suggestions = items);
+
+    // İstersen en son kullanılanı otomatik doldur:
+    // if (items.isNotEmpty && (emailController.text.isEmpty)) {
+    //   emailController.text = items.first;
+    // }
+  }
 
   @override
   void dispose() {
@@ -91,6 +113,10 @@ class _LoginPageState extends State<LoginPage> {
         rememberMe: rememberMe,
       );
       if (!success) return;
+
+      // Başarılı giriş → geçmişe ekle
+      await UsernameHistory.add(emailController.text.trim());
+      await _loadUsernames();
 
       // İstersen doğrulama diyaloğunu tekrar aktif et:
       // final userService = UserService();
@@ -194,21 +220,18 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Center page(ThemeProvider themeProvider, List<Map<String, dynamic>> fields,
-      BuildContext context) {
+  Center page(ThemeProvider themeProvider, List<Map<String, dynamic>> fields, BuildContext context) {
     return Center(
       child: SingleChildScrollView(
         child: Container(
           constraints: const BoxConstraints(maxWidth: 400.0),
           padding: const EdgeInsets.all(16.0),
           margin: const EdgeInsets.all(16.0),
-          decoration: themeProvider.isDarkMode
-              ? getDarkBoxDecoration()
-              : getLightBoxDecoration(),
+          decoration: themeProvider.isDarkMode ? getDarkBoxDecoration() : getLightBoxDecoration(),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: AbsorbPointer( // tüm formu _busy iken kilitler
-              absorbing: _busy,
+            child: AbsorbPointer(
+              absorbing: _busy, // tüm formu _busy iken kilitler
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -219,15 +242,26 @@ class _LoginPageState extends State<LoginPage> {
                     const Center(
                       child: Text(
                         'Welcome Back!',
-                        style: TextStyle(
-                            fontSize: 24.0, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: 24.0, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(height: 16.0),
+
+                    // === Alanlar ===
                     ListView.builder(
                       itemCount: fields.length,
                       shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                       itemBuilder: (context, index) {
+                        // 0: Email alanı → Autocomplete ile
+                        if (index == 0) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0),
+                            child: _emailWithSuggestions(themeProvider),
+                          );
+                        }
+
+                        // Diğer alanlar (şifre vb.) aynen
                         final field = fields[index];
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 16.0),
@@ -244,7 +278,9 @@ class _LoginPageState extends State<LoginPage> {
                         );
                       },
                     ),
+
                     const SizedBox(height: 12.0),
+
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -280,6 +316,7 @@ class _LoginPageState extends State<LoginPage> {
                       ],
                     ),
                     const SizedBox(height: 12.0),
+
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -290,9 +327,7 @@ class _LoginPageState extends State<LoginPage> {
                                 : () {
                                     Navigator.push(
                                       context,
-                                      MaterialPageRoute(
-                                        builder: (context) => const Terms(),
-                                      ),
+                                      MaterialPageRoute(builder: (context) => const Terms()),
                                     );
                                   },
                             child: const Text(
@@ -313,8 +348,7 @@ class _LoginPageState extends State<LoginPage> {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => const AuthPage(
-                                            mode: AuthMode.forgotPassword),
+                                        builder: (context) => const AuthPage(mode: AuthMode.forgotPassword),
                                       ),
                                     );
                                   },
@@ -330,7 +364,9 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ],
                     ),
+
                     const SizedBox(height: 12.0),
+
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -359,8 +395,7 @@ class _LoginPageState extends State<LoginPage> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) =>
-                                          const AuthPage(mode: AuthMode.register),
+                                      builder: (context) => const AuthPage(mode: AuthMode.register),
                                     ),
                                   );
                                 },
@@ -377,6 +412,93 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Email alanını Autocomplete ile, sizin CustomFormField görünümüyle sunar.
+  Widget _emailWithSuggestions(ThemeProvider themeProvider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Autocomplete<String>(
+          optionsBuilder: (TextEditingValue tev) {
+            final q = tev.text.toLowerCase();
+            if (q.isEmpty) return _suggestions;
+            return _suggestions.where((u) => u.toLowerCase().contains(q));
+          },
+          onSelected: (val) {
+            emailController.text = val;
+          },
+          fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+            // Autocomplete kendi controller'ını sağlıyor; bizim emailController ile senkronla
+            textEditingController.text = emailController.text;
+            textEditingController.selection = emailController.selection;
+
+            textEditingController.addListener(() {
+              // iki controller'ı senkron tut
+              emailController.value = textEditingController.value;
+            });
+
+            return CustomFormField(
+              controller: textEditingController, // ÖNEMLİ: Autocomplete controller'ı
+              themeProvider: themeProvider,
+              label: 'Email',
+              hint: 'Enter your email',
+              icon: const Icon(Icons.email),
+              validationMessage: 'Please enter a valid email',
+              isEmail: true,
+              focusNode: focusNode,
+              
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            final opts = options.toList();
+            if (opts.isEmpty) return const SizedBox.shrink();
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(8),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 220, minWidth: 300),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: opts.length,
+                    itemBuilder: (context, i) {
+                      final v = opts[i];
+                      return ListTile(
+                        dense: true,
+                        title: Text(v),
+                        onTap: () => onSelected(v),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+
+        if (_suggestions.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              icon: const Icon(Icons.clear_all, size: 18),
+              onPressed: _busy
+                  ? null
+                  : () async {
+                      await UsernameHistory.clear();
+                      await _loadUsernames();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Kullanıcı adı geçmişi temizlendi')),
+                        );
+                      }
+                    },
+              label: const Text('Geçmişi temizle'),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -272,8 +272,8 @@ class _CustomImagePickerState extends State<CustomImagePicker> {
         ),
         if (widget.canEdit)
           Positioned(
-            bottom: 10,
-            right: 10,
+            bottom: -10,
+            right: -10,
             child: GestureDetector(
               onTap: _pickAndCropImage,
               child: Container(

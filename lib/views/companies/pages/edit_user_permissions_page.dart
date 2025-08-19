@@ -1,7 +1,9 @@
 // ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/api_manager.dart';
+
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
+import 'package:seaofsea/services/v1/v1_config.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
 
@@ -21,14 +23,18 @@ class EditUserPermissionsPage extends StatefulWidget {
 }
 
 class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
+  final v1 = V1ApiManager();
+
   List<Map<String, dynamic>> allPermissions = [];
   List<String> userPermissions = [];
 
   bool isLoading = true;
-  int userRole = 3;
-  int currentUserRole = 3;
 
-  final Map<int, String> roleIdToName = {
+  // Varsayılan rol eşlemesi (gerçek id'ler DB'de farklı olabilir)
+  int userRole = 3; // viewer
+  int currentUserRole = 3; // viewer
+
+  final Map<int, String> roleIdToName = const {
     1: 'admin',
     2: 'editor',
     3: 'viewer',
@@ -36,7 +42,7 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
     5: 'suspended',
   };
 
-  final Map<String, int> roleNameToId = {
+  final Map<String, int> roleNameToId = const {
     'admin': 1,
     'editor': 2,
     'viewer': 3,
@@ -47,19 +53,31 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
   @override
   void initState() {
     super.initState();
-    userRole = roleNameToId[widget.userData['role']] ?? 3;
+    // Gelen userData['role'] string ise ID'ye çevir
+    userRole = roleNameToId[
+            (widget.userData['role'] ?? '').toString().toLowerCase()] ??
+        3;
 
+    // Editorün (siz) global rolü; ideal olan şirket-özel rolü kontrol etmektir
     currentUserRole = roleNameToId[
-            Provider.of<AuthProvider>(context, listen: false)
-                .userInfo?['role']] ??
+            (Provider.of<AuthProvider>(context, listen: false)
+                        .userInfo?['role'] ??
+                    '')
+                .toString()
+                .toLowerCase()] ??
         3;
 
     _fetchPermissions();
   }
 
+  /// Üst başlık (avatar + email + rol dropdown)
   Widget _buildUserHeader() {
-    final image = widget.userData['user_image'];
-    final email = widget.userData['email'] ?? '';
+    final image = widget.userData['user_image']?.toString();
+    final email = (widget.userData['email'] ?? '').toString();
+
+    final imgUrl = (image != null && image.isNotEmpty)
+        ? '${V1Config.baseUrl}uploads/user/user/$image'
+        : null;
 
     return Column(
       children: [
@@ -73,18 +91,13 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                 backgroundColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-                backgroundImage: image != null
-                    ? NetworkImage('http://localhost/images/user/user/$image')
-                    : null,
+                backgroundImage: imgUrl != null ? NetworkImage(imgUrl) : null,
                 child:
-                    image == null ? const Icon(Icons.person, size: 20) : null,
+                    imgUrl == null ? const Icon(Icons.person, size: 20) : null,
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  email,
-                  style: const TextStyle(fontSize: 14),
-                ),
+                child: Text(email, style: const TextStyle(fontSize: 14)),
               ),
               const Spacer(),
               Expanded(
@@ -104,10 +117,9 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                   ),
                   dropdownColor: Theme.of(context).colorScheme.surface,
                   onChanged: (newRole) {
+                    // Admin olmayan biri admin atayamasın
                     if (currentUserRole != 1 && newRole == 1) return;
-                    setState(() {
-                      userRole = newRole ?? 3;
-                    });
+                    setState(() => userRole = (newRole as int?) ?? 3);
                   },
                   items: roleIdToName.entries.map((entry) {
                     final disabled = currentUserRole != 1 && entry.key == 1;
@@ -116,9 +128,7 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                       enabled: !disabled,
                       child: Text(
                         entry.value[0].toUpperCase() + entry.value.substring(1),
-                        style: TextStyle(
-                          color: disabled ? Colors.grey : null,
-                        ),
+                        style: TextStyle(color: disabled ? Colors.grey : null),
                       ),
                     );
                   }).toList(),
@@ -135,13 +145,31 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
   Future<void> _fetchPermissions() async {
     setState(() => isLoading = true);
 
-    final all = await ApiManager.empty().post(context, 'get_all_permissions', {
-      'scope': 'company',
-    });
-    if (all['success'] == true && all['data']?['permissions'] is List) {
-      final raw = all['data']['permissions'];
-      allPermissions = List<Map<String, dynamic>>.from(raw);
-    } else {
+    // 1) Tüm izinler (v1: permission.getAll)
+    final all = await v1.call(
+      module: 'permission',
+      action: 'getAll',
+      params: {'scope': 'company'},
+      context: context,
+    );
+
+    // Beklenen format: data: List<Map>  veya data: { permissions: List }
+    List perms = [];
+    if (all['success'] == true) {
+      final d = all['data'];
+      if (d is List) {
+        perms = d;
+      } else if (d is Map && d['permissions'] is List) {
+        perms = d['permissions'];
+      }
+    }
+
+    allPermissions = perms
+        .where((e) => e is Map)
+        .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    if (allPermissions.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to load all permissions.')),
       );
@@ -149,22 +177,41 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
       return;
     }
 
-    final user =
-        await ApiManager.empty().post(context, 'get_user_permissions', {
-      'user_id': widget.userData['id'],
-      'company_id': widget.companyId,
-    });
+    // 2) Kullanıcının şirket-özel izinleri (v1: permission.getUserForCompany)
+    final userRes = await v1.call(
+      module: 'permission',
+      action: 'getUserForCompany', // <- Backend’de bu aksiyon olmalı
+      params: {
+        'user_id': widget.userData['id'],
+        'company_id': widget.companyId,
+      },
+      context: context,
+    );
 
-    if (user['success'] == true &&
-        user['data'] != null &&
-        user['data']['permissions'] is List) {
-      userPermissions = List<String>.from(user['data']['permissions']);
+    if (userRes['success'] == true && userRes['data'] is Map) {
+      final d = userRes['data'] as Map;
+      // role -> string de gelebilir; eşle
+      final roleName = (d['role'] ?? '').toString().toLowerCase();
+      if (roleName.isNotEmpty && roleNameToId.containsKey(roleName)) {
+        userRole = roleNameToId[roleName]!;
+      } else if (d['role_id'] != null) {
+        userRole = int.tryParse(d['role_id'].toString()) ?? userRole;
+      }
+
+      final ups = (d['permissions'] is List)
+          ? List<String>.from(d['permissions'].map((e) => e.toString()))
+          : <String>[];
+      userPermissions = ups;
     } else {
+      // Eğer backend’de henüz v1 aksiyon yoksa, burada “geçici” hata göster
+      // (Eski ApiManager uçlarına dönmek 401 zinciri yaratıyordu)
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to load user permissions.')),
+        const SnackBar(
+          content: Text('User permissions endpoint (v1) not available.'),
+        ),
       );
-      setState(() => isLoading = false);
-      return;
+      // Varsayılan boş kalsın
+      userPermissions = [];
     }
 
     setState(() => isLoading = false);
@@ -181,16 +228,28 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
   }
 
   Future<void> _savePermissions() async {
-    final result =
-        await ApiManager.empty().post(context, 'update_user_permissions', {
-      'user_id': widget.userData['id'],
-      'company_id': widget.companyId,
-      'permission_codes': userPermissions,
-      'role_id': userRole, // 👈 rol güncellemesi için eklendi
-    });
+    // Hem role_id hem role (string) gönder → backend hangisini isterse onu kullansın
+    final roleStr = roleIdToName[userRole] ?? 'viewer';
+
+    final result = await v1.call(
+      module: 'permission',
+      action: 'updateUserForCompany', // <- Backend’de bu aksiyon olmalı
+      params: {
+        'user_id': widget.userData['id'],
+        'company_id': widget.companyId,
+        'permission_codes': userPermissions,
+        'role_id': userRole,
+        'role': roleStr,
+      },
+      context: context,
+    );
 
     if (result['success'] == true) {
       Navigator.pop(context, true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['message']?.toString() ?? 'Save failed')),
+      );
     }
   }
 
@@ -200,13 +259,16 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
         Provider.of<AuthProvider>(context, listen: false).userInfo?['id'];
 
     final isAdmin =
-        Provider.of<AuthProvider>(context, listen: false).userInfo?['role'] ==
+        (Provider.of<AuthProvider>(context, listen: false).userInfo?['role'] ??
+                    '')
+                .toString()
+                .toLowerCase() ==
             'admin';
 
     final canEdit = !isSelf || isAdmin;
 
     return CustomScaffold(
-      title: 'Permissions: ${widget.userData['name']}',
+      title: 'Permissions: ${widget.userData['name'] ?? ''}',
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -218,27 +280,25 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
                     children: [
-                      const Text(
-                        'Company Permissions',
-                        style: TextStyle(fontStyle: FontStyle.italic),
-                      ),
+                      const Text('Company Permissions',
+                          style: TextStyle(fontStyle: FontStyle.italic)),
                       const Spacer(),
-                      const Text(
-                        'Select All / Deselect All',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                      const Text('Select All / Deselect All',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                       Padding(
                         padding: const EdgeInsets.only(right: 12.0, left: 8.0),
                         child: Checkbox(
                           value:
-                              userPermissions.length == allPermissions.length,
+                              userPermissions.length == allPermissions.length &&
+                                  allPermissions.isNotEmpty,
                           onChanged: canEdit
                               ? (value) {
                                   setState(() {
                                     if (value == true) {
                                       userPermissions = allPermissions
-                                          .map(
-                                              (perm) => perm['code'].toString())
+                                          .map((perm) =>
+                                              (perm['code'] ?? '').toString())
+                                          .where((e) => e.isNotEmpty)
                                           .toList();
                                     } else {
                                       userPermissions.clear();
@@ -257,8 +317,9 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                     itemCount: allPermissions.length,
                     itemBuilder: (context, index) {
                       final permission = allPermissions[index];
-                      final code = permission['code'];
-                      final label = permission['description'] ?? code;
+                      final code = (permission['code'] ?? '').toString();
+                      final label =
+                          (permission['description'] ?? code).toString();
                       final selected = userPermissions.contains(code);
 
                       return CheckboxListTile(
@@ -273,9 +334,9 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                 Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: ElevatedButton.icon(
-                    onPressed: _savePermissions,
+                    onPressed: canEdit ? _savePermissions : null,
                     icon: const Icon(Icons.save),
-                    label: const Text("Save"),
+                    label: const Text('Save'),
                   ),
                 )
               ],

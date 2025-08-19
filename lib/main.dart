@@ -14,6 +14,7 @@ import 'package:seaofsea/utils/theme_data.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/views/auth/auth_page.dart';
 import 'package:seaofsea/views/home_page.dart';
+import 'package:seaofsea/widgets/screensaver_gate.dart';
 
 class MyHttpOverrides extends HttpOverrides {
   @override
@@ -30,8 +31,10 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   V1ApiManager.onUnauthorized = () {
-    navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (route) => false);
+    navigatorKey.currentState
+        ?.pushNamedAndRemoveUntil('/login', (route) => false);
   };
+  V1ApiManager.navKey = navigatorKey;
   if (const bool.fromEnvironment('dart.vm.product') == false) {
     if (!kReleaseMode) {
       HttpOverrides.global = MyHttpOverrides();
@@ -69,6 +72,8 @@ class MmsApp extends StatelessWidget {
               themeMode: themeProvider.themeMode,
               onGenerateRoute: generateRoute,
               initialRoute: '/',
+              builder: (context, child) =>
+                  ScreenSaverGate(child: child ?? const SizedBox()),
               localizationsDelegates: const [
                 ...GlobalMaterialLocalizations.delegates,
                 quill.FlutterQuillLocalizations.delegate,
