@@ -4,6 +4,7 @@ import 'package:seaofsea/pages/permission_debug_page.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/views/admin_dashboard.dart';
 import 'package:seaofsea/views/auth/auth_page.dart';
+import 'package:seaofsea/views/companies/announcements/company_announcements_page.dart';
 import 'package:seaofsea/views/companies/company_detail_page.dart';
 import 'package:seaofsea/views/companies/pages/company_notifications_page.dart';
 import 'package:seaofsea/views/companies/pages/company_setting_page.dart';
@@ -143,6 +144,12 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
         builder: (_) => const CompanyNotificationsPage(),
         settings: settings,
       );
+    case '/company_announcements':
+      (ctx) {
+        final args = ModalRoute.of(ctx)!.settings.arguments as Map?;
+        return CompanyAnnouncementsPage(
+            companyId: (args?['company_id'] as int?) ?? 0);
+      };
 
     default:
       return MaterialPageRoute(
@@ -165,7 +172,8 @@ class _BadArgsPage extends StatelessWidget {
   }
 }
 
-void navigateReplacement(BuildContext context, String routeName, {Object? arguments}) {
+void navigateReplacement(BuildContext context, String routeName,
+    {Object? arguments}) {
   final r = generateRoute(RouteSettings(name: routeName, arguments: arguments));
   if (r != null) Navigator.of(context).pushReplacement(r);
 }

@@ -1,3 +1,4 @@
+// lib/views/user_settings/privacy_settings.dart
 // ignore_for_file: use_build_context_synchronously
 
 import 'dart:ui';
@@ -44,7 +45,7 @@ class _PrivacySettingsState extends State<PrivacySettings> {
       ctx,
       duration: const Duration(milliseconds: 450),
       curve: Curves.easeInOut,
-      alignment: alignment, // 0.0 başa yapıştırır; 0.05 az boşluk bırakır
+      alignment: alignment,
     );
   }
 
@@ -68,7 +69,8 @@ class _PrivacySettingsState extends State<PrivacySettings> {
     if (newPass.length < 8) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('New password must be at least 8 characters')),
+          content: Text('New password must be at least 8 characters'),
+        ),
       );
       return;
     }
@@ -97,7 +99,9 @@ class _PrivacySettingsState extends State<PrivacySettings> {
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(resp['message'] ?? 'Failed to update password')),
+        SnackBar(
+          content: Text(resp['message'] ?? 'Failed to update password'),
+        ),
       );
     }
   }
@@ -140,7 +144,13 @@ class _PrivacySettingsState extends State<PrivacySettings> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = theme.colorScheme;
     final ss = context.watch<ScreenSaverService>();
+
+    // Glass panel renkleri — alpha (0–255) ile
+    final glassBg = c.surface.withAlpha(220);           // ~86% opak
+    final glassBorder = c.outlineVariant.withAlpha(100);
 
     return Center(
       child: Padding(
@@ -153,27 +163,26 @@ class _PrivacySettingsState extends State<PrivacySettings> {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(15),
+                color: glassBg,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withAlpha(20)),
+                border: Border.all(color: glassBorder),
               ),
               child: SingleChildScrollView(
                 controller: _scrollController,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.privacy_tip_outlined,
-                        size: 48, color: Colors.white),
+                    Icon(Icons.privacy_tip_outlined, size: 48, color: c.primary),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Privacy and Security',
-                      style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: c.onSurface,
+                      ),
                     ),
 
-                    // -------- Anchor butonları --------
+                    // -------- Anchor buttons --------
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 8,
@@ -183,19 +192,19 @@ class _PrivacySettingsState extends State<PrivacySettings> {
                           onPressed: () => _scrollTo(_screenSaverKey),
                           icon: const Icon(Icons.tv_outlined, size: 18),
                           label: const Text('Screen Saver'),
-                          style: _anchorStyle(),
+                          style: _anchorStyle(context),
                         ),
                         OutlinedButton.icon(
                           onPressed: () => _scrollTo(_changePwdKey),
                           icon: const Icon(Icons.lock_reset, size: 18),
                           label: const Text('Change Password'),
-                          style: _anchorStyle(),
+                          style: _anchorStyle(context),
                         ),
                         OutlinedButton.icon(
                           onPressed: () => _scrollTo(_sessionCtrlKey),
                           icon: const Icon(Icons.logout, size: 18),
                           label: const Text('Session Control'),
-                          style: _anchorStyle(),
+                          style: _anchorStyle(context),
                         ),
                       ],
                     ),
@@ -206,44 +215,54 @@ class _PrivacySettingsState extends State<PrivacySettings> {
                     Container(
                       key: _screenSaverKey,
                       alignment: Alignment.centerLeft,
-                      child: const Text(
+                      child: Text(
                         'Screen Saver',
-                        style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: c.onSurface,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
 
                     SwitchListTile(
-                      title: const Text('Enable screen saver',
-                          style: TextStyle(color: Colors.white)),
+                      title: Text('Enable screen saver',
+                          style: theme.textTheme.bodyLarge?.copyWith(
+                            color: c.onSurface,
+                          )),
                       value: ss.enabled,
                       onChanged: (v) => ss.setEnabled(v),
                     ),
                     const SizedBox(height: 8),
 
-                    // Row: solda başlık, sağda dropdown (sabit genişlik)
+                    // Row: Timeout + Dropdown
                     Row(
                       children: [
                         const SizedBox(width: 18),
-                        const Text('Timeout',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500)),
+                        Text(
+                          'Timeout',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: c.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         const Spacer(),
                         ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 120),
+                          constraints: const BoxConstraints(maxWidth: 140),
                           child: DropdownButtonHideUnderline(
-                            child: Container(
+                            child: SizedBox(
                               height: 42,
                               child: InputDecorator(
-                                decoration: const InputDecoration(
-                                  contentPadding: EdgeInsets.symmetric(
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 12, vertical: 10),
-                                  border: OutlineInputBorder(),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  // Tema ile uyumlu hafif arka plan
+                                  filled: true,
+                                  fillColor: c.surfaceContainerHighest.withAlpha(60),
                                 ),
                                 child: DropdownButton<Duration>(
                                   isExpanded: true,
@@ -272,13 +291,19 @@ class _PrivacySettingsState extends State<PrivacySettings> {
                     const SizedBox(height: 12),
 
                     SwitchListTile(
-                      title: const Text('Require password to unlock',
-                          style: TextStyle(color: Colors.white)),
+                      title: Text(
+                        'Require password to unlock',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: c.onSurface,
+                        ),
+                      ),
                       subtitle: Text(
                         ss.hasPassword()
                             ? 'Password is set'
                             : 'No password set — unlock will dismiss on tap/move',
-                        style: const TextStyle(color: Colors.white70),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: c.onSurfaceVariant,
+                        ),
                       ),
                       value: ss.lockEnabled,
                       onChanged: (v) => ss.setLockEnabled(v),
@@ -288,11 +313,10 @@ class _PrivacySettingsState extends State<PrivacySettings> {
                     Row(
                       children: [
                         Expanded(
-                          child: ElevatedButton.icon(
+                          child: FilledButton.icon(
                             onPressed: () async {
-                              final ok =
-                                  await _showSetScreensaverPasswordDialog(
-                                      context, ss);
+                              final ok = await _showSetScreensaverPasswordDialog(
+                                  context, ss);
                               if (ok == true) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -302,16 +326,20 @@ class _PrivacySettingsState extends State<PrivacySettings> {
                               }
                             },
                             icon: const Icon(Icons.lock),
-                            label: Text(ss.hasPassword()
-                                ? 'Change unlock password'
-                                : 'Set unlock password'),
+                            label: Text(
+                              ss.hasPassword()
+                                  ? 'Change unlock password'
+                                  : 'Set unlock password',
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
                         if (ss.hasPassword())
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.redAccent),
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: c.error,
+                              foregroundColor: c.onError,
+                            ),
                             onPressed: () async {
                               await ss.setPassword('');
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -327,73 +355,74 @@ class _PrivacySettingsState extends State<PrivacySettings> {
                     ),
 
                     const SizedBox(height: 24),
-                    const Divider(color: Colors.white24),
+                    Divider(color: c.outlineVariant.withAlpha(80)),
                     const SizedBox(height: 12),
 
                     // -------------------- Change Password --------------------
                     Container(
                       key: _changePwdKey,
                       alignment: Alignment.centerLeft,
-                      child: const Text(
+                      child: Text(
                         'Change Password',
-                        style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: c.onSurface,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
-                    _glassField(_currentPasswordController, 'Current Password'),
+                    _glassPasswordField(
+                        context, _currentPasswordController, 'Current Password'),
                     const SizedBox(height: 8),
-                    _glassField(_newPasswordController, 'New Password'),
+                    _glassPasswordField(
+                        context, _newPasswordController, 'New Password'),
                     const SizedBox(height: 8),
-                    _glassField(_confirmPasswordController, 'Confirm Password'),
+                    _glassPasswordField(
+                        context, _confirmPasswordController, 'Confirm Password'),
                     const SizedBox(height: 12),
-                    ElevatedButton.icon(
+                    FilledButton.icon(
                       onPressed: _busy ? null : _changePassword,
-                      icon: const Icon(Icons.lock_reset),
-                      label: _busy
+                      icon: _busy
                           ? const SizedBox(
                               height: 18,
                               width: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Update Password'),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent),
+                          : const Icon(Icons.lock_reset),
+                      label: const Text('Update Password'),
                     ),
 
                     const SizedBox(height: 24),
-                    const Divider(color: Colors.white24),
+                    Divider(color: c.outlineVariant.withAlpha(80)),
                     const SizedBox(height: 12),
 
                     // -------------------- Session Control --------------------
                     Container(
                       key: _sessionCtrlKey,
                       alignment: Alignment.centerLeft,
-                      child: const Text(
+                      child: Text(
                         'Session Control',
-                        style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: c.onSurface,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    ElevatedButton.icon(
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: c.error,
+                        foregroundColor: c.onError,
+                      ),
                       onPressed: _busy ? null : _logoutAllDevices,
-                      icon: const Icon(Icons.logout),
-                      label: _busy
+                      icon: _busy
                           ? const SizedBox(
                               height: 18,
                               width: 18,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Log out from all devices'),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent),
+                          : const Icon(Icons.logout),
+                      label: const Text('Log out from all devices'),
                     ),
                   ],
                 ),
@@ -405,35 +434,40 @@ class _PrivacySettingsState extends State<PrivacySettings> {
     );
   }
 
-  ButtonStyle _anchorStyle() {
+  ButtonStyle _anchorStyle(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
     return OutlinedButton.styleFrom(
-      foregroundColor: Colors.white,
-      side: BorderSide(color: Colors.white.withOpacity(0.25)),
-      backgroundColor: Colors.white.withOpacity(0.06),
+      foregroundColor: c.primary,
+      side: BorderSide(color: c.outlineVariant.withAlpha(100)),
+      backgroundColor: c.surfaceContainerHighest.withAlpha(40),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     );
   }
 
-  Widget _glassField(TextEditingController controller, String hintText) {
+  Widget _glassPasswordField(
+      BuildContext context, TextEditingController controller, String hintText) {
+    final c = Theme.of(context).colorScheme;
     return TextField(
       controller: controller,
       obscureText: true,
-      style: const TextStyle(color: Colors.white),
+      style: TextStyle(color: c.onSurface),
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: const TextStyle(color: Colors.white70),
+        hintStyle: TextStyle(color: c.onSurfaceVariant),
         filled: true,
-        fillColor: Colors.white.withAlpha((0.15 * 255).round()),
+        fillColor: c.surfaceContainerHighest.withAlpha(60),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: Colors.white.withAlpha((0.3 * 255).round())),
+          borderSide: BorderSide(color: c.outlineVariant.withAlpha(120)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: Colors.white.withAlpha((0.3 * 255).round())),
+          borderSide: BorderSide(color: c.outlineVariant.withAlpha(120)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: c.primary),
         ),
       ),
     );
@@ -441,6 +475,9 @@ class _PrivacySettingsState extends State<PrivacySettings> {
 
   Future<bool?> _showSetScreensaverPasswordDialog(
       BuildContext context, ScreenSaverService ss) async {
+    final theme = Theme.of(context);
+    final c = theme.colorScheme;
+
     String p1 = '';
     String p2 = '';
     String? err;
@@ -473,7 +510,7 @@ class _PrivacySettingsState extends State<PrivacySettings> {
                 ),
                 if (err != null) ...[
                   const SizedBox(height: 8),
-                  Text(err!, style: const TextStyle(color: Colors.red)),
+                  Text(err!, style: TextStyle(color: c.error)),
                 ],
               ],
             ),
@@ -482,7 +519,7 @@ class _PrivacySettingsState extends State<PrivacySettings> {
                 onPressed: () => Navigator.pop(ctx, false),
                 child: const Text('Cancel'),
               ),
-              ElevatedButton(
+              FilledButton(
                 onPressed: () async {
                   if (p1.isEmpty || p2.isEmpty) {
                     setState(() => err = 'Fill both fields');

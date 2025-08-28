@@ -113,7 +113,7 @@ class _EditUserPermissionsPageState extends State<EditUserPermissionsPage> {
                       ),
                     ),
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
                   dropdownColor: Theme.of(context).colorScheme.surface,
                   onChanged: (newRole) {

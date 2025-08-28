@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
@@ -19,12 +20,19 @@ class _HomePageState extends State<HomePage> {
 
   // Dashboard bağlamı
   bool _contextIsCompany = false; // "Kişisel" varsayılan
-  String? _selectedCompanyId; // Şirket seçici (placeholder)
-  bool get _hasCompanies =>
-      false; 
-      // TODO: gerçek şirket listesi bağlanınca güncellenecek
+  String? _selectedCompanyId; // Şirket seçici
 
   final ScrollController _infoScrollController = ScrollController();
+
+  List<Map<String, dynamic>> _myCompanies = [];
+  bool _loadingCompanies = false;
+  bool get _hasCompanies => _myCompanies.isNotEmpty;
+
+  // KPI state (null => skeleton)
+  int? _kpiNotifications;
+  int? _kpiApplications;
+  int? _kpiOpenJobs;
+  int? _kpiProfilePercent; // TODO: profil yüzdesi FE'de hesaplanacak
 
   // Placeholder duyurular (2.2.3)
   static const List<Map<String, String>> _announcements = [
@@ -39,6 +47,8 @@ class _HomePageState extends State<HomePage> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final userInfo = authProvider.userInfo;
+
+    _fetchMyCompanies();
 
     if (userInfo != null) {
       final isVerified = userInfo['is_verified'];
@@ -92,6 +102,12 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  @override
+  void dispose() {
+    _infoScrollController.dispose();
+    super.dispose();
+  }
+
   void _animateInfoScroll() {
     if (_infoScrollController.hasClients &&
         _infoScrollController.position.maxScrollExtent > 0) {
@@ -109,6 +125,217 @@ class _HomePageState extends State<HomePage> {
           );
         }
       });
+    }
+  }
+
+  void _onCompanyChanged(String id) {
+    setState(() {
+      _selectedCompanyId = id;
+      _contextIsCompany = true;
+    });
+    _refreshDashboardForCompany();
+  }
+
+  List<Map<String, dynamic>> _parseItems(dynamic data) {
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    if (data is Map && data['items'] is List) {
+      final items = data['items'] as List;
+      return items
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    }
+    return <Map<String, dynamic>>[];
+  }
+
+  int _parseTotal(dynamic data, int fallback) {
+    if (data is Map) {
+      final t = data['total'];
+      if (t is int) return t;
+      if (t is String) return int.tryParse(t) ?? fallback;
+    }
+    return fallback;
+  }
+
+  Future<void> _fetchMyCompanies() async {
+    setState(() => _loadingCompanies = true);
+    try {
+      final v1 = context.read<V1ApiManager>();
+      final res =
+          await v1.call(module: 'company', action: 'my_list', params: {});
+      final raw = _parseItems(res['data']);
+
+      final mapped = raw
+          .map((e) {
+            final rawId = (e['id'] ?? e['company_id']);
+            final idStr = rawId?.toString();
+            final idInt = (rawId is int) ? rawId : int.tryParse(idStr ?? '');
+            return {
+              'id': idStr, // Dropdown için String
+              'idInt': idInt, // Navigasyon/KPI için int
+              'name': (e['short_name'] ?? e['name'] ?? 'Company').toString(),
+              'role': (e['role'] ?? '').toString(),
+            };
+          })
+          .where((m) => m['id'] != null && m['idInt'] != null)
+          .toList();
+
+      final seen = <String>{};
+      final dedup = <Map<String, dynamic>>[];
+      for (final m in mapped) {
+        final id = m['id'] as String;
+        if (seen.add(id)) dedup.add(m);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _myCompanies = dedup;
+
+        final hasSelected = _selectedCompanyId != null &&
+            _myCompanies.any((c) => c['id'] == _selectedCompanyId);
+
+        if (!hasSelected) {
+          _selectedCompanyId = _myCompanies.isNotEmpty
+              ? _myCompanies.first['id'] as String
+              : null;
+        }
+
+        // Şirket yoksa alan gizli; varsa kullanıcı isterse şirket moduna geçer
+        _contextIsCompany =
+            _myCompanies.isNotEmpty && _selectedCompanyId != null;
+      });
+
+      // İlk yüklemede seçili şirket varsa KPI’ları çek
+      if (_contextIsCompany && _selectedCompanyId != null) {
+        await _refreshDashboardForCompany();
+      }
+    } catch (e) {
+      debugPrint('❌ _fetchMyCompanies error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Companies could not be loaded')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingCompanies = false);
+    }
+  }
+
+  // ---- KPI Helpers ----
+  Future<int> _fetchTotal({
+    required String module,
+    required String action,
+    Map<String, dynamic>? params,
+  }) async {
+    final v1 = context.read<V1ApiManager>();
+    final res =
+        await v1.call(module: module, action: action, params: params ?? {});
+    return _parseTotal(res['data'], 0);
+  }
+
+  Future<int> _tryTotals(
+    List<({String module, String action, Map<String, dynamic> params})>
+        attempts,
+  ) async {
+    for (final a in attempts) {
+      try {
+        return await _fetchTotal(
+          module: a.module,
+          action: a.action,
+          params: a.params,
+        );
+      } catch (_) {
+        // bir sonrakini dene
+      }
+    }
+    return 0;
+  }
+
+  Future<void> _refreshDashboardForCompany() async {
+    setState(() {
+      _kpiNotifications = null;
+      _kpiApplications = null;
+      _kpiOpenJobs = null;
+      _kpiProfilePercent = null;
+    });
+
+    final String? selIdStr = _selectedCompanyId;
+    final int? companyId = (selIdStr != null) ? int.tryParse(selIdStr) : null;
+
+    try {
+      // 1) Bildirimler (sadece unread)
+      final notif = await _tryTotals([
+        (
+          module: 'company_notification',
+          action: 'list',
+          params: {
+            'only_unread': 1,
+            if (companyId != null) 'company_id': companyId,
+            'page': 1,
+            'perPage': 1,
+          }
+        ),
+        (
+          module: 'company_notifications',
+          action: 'list',
+          params: {
+            'only_unread': 1,
+            if (companyId != null) 'company_id': companyId,
+            'page': 1,
+            'perPage': 1,
+          }
+        ),
+      ]);
+
+      // 2) Başvurularım
+      final apps = await _fetchTotal(
+        module: 'job',
+        action: 'my_applications',
+        params: {'status': 'submitted', 'page': 1, 'perPage': 1},
+      );
+
+      // 3) Açık ilanlar (şirket modunda)
+      int openJobs = 0;
+      if (_contextIsCompany && companyId != null) {
+        openJobs = await _fetchTotal(
+          module: 'job',
+          action: 'list',
+          params: {
+            'company_id': companyId,
+            'status': 'open',
+            'page': 1,
+            'perPage': 1
+          },
+        );
+      }
+
+      // 4) Profil % (sonra gerçek hesap bağlanacak)
+      final int? pct = null;
+
+      if (!mounted) return;
+      setState(() {
+        _kpiNotifications = notif;
+        _kpiApplications = apps;
+        _kpiOpenJobs = _contextIsCompany ? openJobs : null;
+        _kpiProfilePercent = pct;
+      });
+    } catch (e) {
+      debugPrint('❌ _refreshDashboardForCompany error: $e');
+      if (!mounted) return;
+      setState(() {
+        _kpiNotifications = 0;
+        _kpiApplications = 0;
+        _kpiOpenJobs = _contextIsCompany ? 0 : null;
+        _kpiProfilePercent = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Dashboard verileri yenilenemedi')),
+      );
     }
   }
 
@@ -145,7 +372,7 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   _buildContextBar(cardColor, borderColor, textColor, isDark),
                   const SizedBox(height: 12),
-                  _buildBannerStack(), // Email doğrulama uyarısına ek, global duyurular
+                  _buildBannerStack(),
                   const SizedBox(height: 12),
                   _buildKpiRow(textColor, cardColor, borderColor),
                   const SizedBox(height: 16),
@@ -297,11 +524,11 @@ class _HomePageState extends State<HomePage> {
   // BLOK: Context Bar (2.1)
   // =========================
   Widget _buildContextBar(
-    Color cardColor,
-    Color borderColor,
-    Color textColor,
-    bool isDark,
-  ) {
+      Color cardColor, Color borderColor, Color textColor, bool isDark) {
+    if (_myCompanies.isEmpty) {
+      return const SizedBox.shrink(); // şirket yoksa tamamen gizle
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -311,58 +538,71 @@ class _HomePageState extends State<HomePage> {
       ),
       child: Row(
         children: [
-          // Kişisel/Şirket toggle
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(
-                value: false,
-                label: Text('Personel'),
-                icon: Icon(Icons.person_outline),
-              ),
-              ButtonSegment(
-                value: true,
-                label: Text('Company'),
-                icon: Icon(Icons.apartment_outlined),
-              ),
-            ],
-            selected: {_contextIsCompany},
-            onSelectionChanged: (s) {
-              setState(() {
-                _contextIsCompany = s.first;
-              });
-            },
-          ),
-
+          const Text('Company', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(width: 12),
-
-          // Şirket seçici (yoksa disabled)
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _selectedCompanyId,
-              items: const [], // TODO: şirket listesi bağlanınca doldurulacak
-              onChanged: _hasCompanies
-                  ? (v) => setState(() => _selectedCompanyId = v)
-                  : null,
+              items: _myCompanies
+                  .map((c) => DropdownMenuItem<String>(
+                        value: c['id'] as String,
+                        child: Text(c['name'] as String),
+                      ))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) _onCompanyChanged(v);
+              },
               decoration: InputDecoration(
-                hintText: _hasCompanies ? 'Select Company' : 'Company not found',
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                hintText: 'Select company',
+                isDense: true,
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               ),
             ),
           ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: _selectedCompanyId == null
+                ? null
+                : () {
+                    final comp = _myCompanies.firstWhere(
+                      (c) => c['id'] == _selectedCompanyId,
+                      orElse: () => {},
+                    );
+                    final int? cid = comp['idInt'] as int?;
+                    if (cid == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Geçersiz şirket ID')),
+                      );
+                      return;
+                    }
 
-          const SizedBox(width: 12),
-
-          // Global arama placeholder
-          IconButton(
-            onPressed: () {
-              // TODO: global arama sayfasına git
-            },
-            icon: const Icon(Icons.search),
-            tooltip: 'Search',
+                    Navigator.pushNamed(
+                      context,
+                      '/company_detail', // gerekirse '/company_showcase'
+                      arguments: {
+                        // Karşı tarafın beklentisini birebir karşılayalım:
+                        'id': cid,
+                        'company_id': cid,
+                        // Ekstra bilgi de taşıyoruz (opsiyonel)
+                        'name': comp['name'],
+                        'role': comp['role'],
+                      },
+                    );
+                  },
+            icon: const Icon(Icons.open_in_new),
+            label: Text(
+              (() {
+                final sel = _myCompanies.firstWhere(
+                  (c) => c['id'] == _selectedCompanyId,
+                  orElse: () => const {'role': ''},
+                );
+                return (sel['role'] == 'admin') ? 'Manage' : 'Go to Company';
+              })(),
+            ),
           ),
         ],
       ),
@@ -373,7 +613,6 @@ class _HomePageState extends State<HomePage> {
   // BLOK: BannerStack (2.2)
   // =========================
   Widget _buildBannerStack() {
-    // Şimdilik sadece duyuru bandı (email doğrulama popup'ı zaten initState’de)
     if (_announcements.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -421,23 +660,24 @@ class _HomePageState extends State<HomePage> {
   // BLOK: KPI Karoları (2.3)
   // =========================
   Widget _buildKpiRow(Color textColor, Color cardColor, Color borderColor) {
-    // Görünürlük/perm filtreleri ileride bağlanacak
     final items = <_KpiItem>[
       _KpiItem(
           icon: Icons.notifications_active_outlined,
           title: 'Notifications',
-          count: null),
+          count: _kpiNotifications),
       _KpiItem(
-          icon: Icons.assignment_outlined, title: 'My Applications', count: null),
+          icon: Icons.assignment_outlined,
+          title: 'My Applications',
+          count: _kpiApplications),
       _KpiItem(
           icon: Icons.person_pin_circle_outlined,
           title: 'Profile %',
-          count: null),
+          count: _kpiProfilePercent),
       if (_contextIsCompany)
         _KpiItem(
             icon: Icons.work_history_outlined,
             title: 'Open Positions',
-            count: null),
+            count: _kpiOpenJobs),
     ];
 
     return Wrap(
@@ -455,7 +695,7 @@ class _HomePageState extends State<HomePage> {
     Color borderColor,
     Color textColor,
   ) {
-    final loading = item.count == null; // Placeholder
+    final loading = item.count == null;
     return Container(
       width: 180,
       padding: const EdgeInsets.all(12),
@@ -538,7 +778,6 @@ class _HomePageState extends State<HomePage> {
   // BLOK: Discover/Public Pulse (2.5-2.6)
   // =========================
   Widget _buildDiscoverStrip() {
-    // Placeholder yatay kaydırma
     final chips = <String>[
       'Popular Companies',
       'New Listings',
@@ -567,7 +806,6 @@ class _HomePageState extends State<HomePage> {
   // BLOK: Recent (2.5)
   // =========================
   Widget _buildRecentRow() {
-    // Placeholder son gezintiler
     final items = ['Şirket A', 'İlan #1023', 'Şirket B'];
 
     return Column(

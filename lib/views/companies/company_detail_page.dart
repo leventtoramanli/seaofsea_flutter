@@ -9,7 +9,7 @@ import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 
 import 'package:seaofsea/views/companies/company_contact_info.dart';
-import 'package:seaofsea/views/companies/company_dashboard.dart';
+import 'package:seaofsea/views/companies/dashboard/company_dashboard.dart';
 import 'package:seaofsea/views/companies/company_helpers.dart';
 import 'package:seaofsea/views/companies/controllers/company_detail_controller.dart';
 import 'package:seaofsea/views/companies/utils/role_caps.dart';
@@ -277,184 +277,92 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
     return CustomScaffold(
       title: _company['name'] ?? 'Company',
       floatingActionButton: _buildBadges(),
-      body: isAdminOrEditor
-          ? IndexedStack(
-              index: _currentPageIndex,
-              children: [
-                CompanyDashboard(
-                  goToContactInfo: () => setState(() => _currentPageIndex = 1),
-                  companyId: companyId,
-                ),
-                CompanyContactInfo(
-                  header: CompanyHeader(
-                    company: _company,
-                    logoWidget:
-                        buildCompanyLogo(context, companyId, _company['logo']),
-                    adminButtons: buildAdminButtons(
-                      context,
-                      companyId,
-                      _company,
-                      onChanged: () async {
-                        await _retryAll();
-                      },
-                    ),
-                    actionButtons: buildActionButtons(
-                      context,
-                      caps.isViewer,
-                      caps.isFollower,
-                      caps.isEmployee,
-                      companyId,
-                    ),
-                  ),
-                  companyTypeSection: buildCompanyTypeSection(
-                    _allCompanyTypes,
-                    _selectedCompanyTypeIds,
-                    caps.isAdmin,
-                    caps.isEditor,
-                    _handleAddCompanyType,
-                  ),
-                  contactSection: buildContactSection(
-                    context: context,
-                    userRole: _userRole!,
-                    contactInfo: _contactInfo,
-                    onAddPressed: (category) {
-                      showContactDialog(
-                        context: context,
-                        themeProvider: context.read<ThemeProvider>(),
-                        category: category,
-                        contactInfo: _contactInfo,
-                        onUpdate: (updatedInfo) async {
-                          setState(() => _contactInfo = updatedInfo);
-                          updateContactInfoOnServer(
-                            context: context,
-                            companyId: companyId,
-                            contactInfo: updatedInfo,
-                          );
-                          final cid = companyId;
-                          await _c.saveContactInfo(cid, updatedInfo);
-                        },
-                      );
-                    },
-                    onEditPressed: (category, item) {
-                      showContactDialog(
-                        context: context,
-                        themeProvider: context.read<ThemeProvider>(),
-                        category: category,
-                        item: item,
-                        contactInfo: _contactInfo,
-                        onUpdate: (updatedInfo) async {
-                          setState(() => _contactInfo = updatedInfo);
-                          updateContactInfoOnServer(
-                            context: context,
-                            companyId: companyId,
-                            contactInfo: updatedInfo,
-                          );
-                          // Controller senkronizasyonu — 5b
-                          final cid = companyId;
-                          await _c.saveContactInfo(cid, updatedInfo);
-                        },
-                      );
-                    },
-                    onDeletePressed: (category, item, updatedInfo) async {
-                      setState(() => _contactInfo = updatedInfo);
-                      updateContactInfoOnServer(
-                        context: context,
-                        companyId: companyId,
-                        contactInfo: updatedInfo,
-                      );
-                      // Controller senkronizasyonu — 5b
-                      final cid = companyId;
-                      await _c.saveContactInfo(cid, updatedInfo);
-                    },
-                    onTap: (category, value) =>
-                        _handleContactTap(category, value),
-                  ),
-                ),
-              ],
-            )
-          : CompanyContactInfo(
-              header: CompanyHeader(
-                company: _company,
-                logoWidget:
-                    buildCompanyLogo(context, companyId, _company['logo']),
-                adminButtons: buildAdminButtons(
-                  context,
-                  companyId,
-                  _company,
-                  onChanged: () async {
-                    await _retryAll();
-                  },
-                ),
-                actionButtons: buildActionButtons(
-                  context,
-                  caps.isViewer,
-                  caps.isFollower,
-                  caps.isEmployee,
-                  companyId,
-                ),
+      body: IndexedStack(
+        index: _currentPageIndex,
+        children: [
+          CompanyDashboard(
+            goToContactInfo: () => setState(() => _currentPageIndex = 1),
+            companyId: companyId,
+          ),
+          CompanyContactInfo(
+            header: CompanyHeader(
+              company: _company,
+              logoWidget:
+                  buildCompanyLogo(context, companyId, _company['logo']),
+              adminButtons: buildAdminButtons(
+                context,
+                companyId,
+                _company,
+                onChanged: () async => await _retryAll(),
               ),
-              companyTypeSection: buildCompanyTypeSection(
-                _allCompanyTypes,
-                _selectedCompanyTypeIds,
-                caps.isAdmin,
-                caps.isEditor,
-                _handleAddCompanyType,
-              ),
-              contactSection: buildContactSection(
-                context: context,
-                userRole: _userRole!,
-                contactInfo: _contactInfo,
-                onAddPressed: (category) {
-                  showContactDialog(
-                    context: context,
-                    themeProvider: context.read<ThemeProvider>(),
-                    category: category,
-                    contactInfo: _contactInfo,
-                    onUpdate: (updatedInfo) async {
-                      setState(() => _contactInfo = updatedInfo);
-                      updateContactInfoOnServer(
-                        context: context,
-                        companyId: companyId,
-                        contactInfo: updatedInfo,
-                      );
-                      final cid = companyId;
-                      await _c.saveContactInfo(cid, updatedInfo);
-                    },
-                  );
-                },
-                onEditPressed: (category, item) {
-                  showContactDialog(
-                    context: context,
-                    themeProvider: context.read<ThemeProvider>(),
-                    category: category,
-                    item: item,
-                    contactInfo: _contactInfo,
-                    onUpdate: (updatedInfo) async {
-                      setState(() => _contactInfo = updatedInfo);
-                      updateContactInfoOnServer(
-                        context: context,
-                        companyId: companyId,
-                        contactInfo: updatedInfo,
-                      );
-                      // Controller senkronizasyonu — 5b
-                      final cid = companyId;
-                      await _c.saveContactInfo(cid, updatedInfo);
-                    },
-                  );
-                },
-                onDeletePressed: (category, item, updatedInfo) async {
-                  setState(() => _contactInfo = updatedInfo);
-                  updateContactInfoOnServer(
-                    context: context,
-                    companyId: companyId,
-                    contactInfo: updatedInfo,
-                  );
-                  final cid = companyId;
-                  await _c.saveContactInfo(cid, updatedInfo);
-                },
-                onTap: (category, value) => _handleContactTap(category, value),
+              actionButtons: buildActionButtons(
+                context,
+                caps.isViewer,
+                caps.isFollower,
+                caps.isEmployee,
+                companyId,
               ),
             ),
+            companyTypeSection: buildCompanyTypeSection(
+              _allCompanyTypes,
+              _selectedCompanyTypeIds,
+              caps.isAdmin,
+              caps.isEditor,
+              _handleAddCompanyType,
+            ),
+            contactSection: buildContactSection(
+              context: context,
+              userRole: _userRole!,
+              contactInfo: _contactInfo,
+              onAddPressed: (category) {
+                showContactDialog(
+                  context: context,
+                  themeProvider: context.read<ThemeProvider>(),
+                  category: category,
+                  contactInfo: _contactInfo,
+                  onUpdate: (updatedInfo) async {
+                    setState(() => _contactInfo = updatedInfo);
+                    updateContactInfoOnServer(
+                      context: context,
+                      companyId: companyId,
+                      contactInfo: updatedInfo,
+                    );
+                    await _c.saveContactInfo(companyId, updatedInfo);
+                  },
+                );
+              },
+              onEditPressed: (category, item) {
+                showContactDialog(
+                  context: context,
+                  themeProvider: context.read<ThemeProvider>(),
+                  category: category,
+                  item: item,
+                  contactInfo: _contactInfo,
+                  onUpdate: (updatedInfo) async {
+                    setState(() => _contactInfo = updatedInfo);
+                    updateContactInfoOnServer(
+                      context: context,
+                      companyId: companyId,
+                      contactInfo: updatedInfo,
+                    );
+                    await _c.saveContactInfo(companyId, updatedInfo);
+                  },
+                );
+              },
+              onDeletePressed: (category, item, updatedInfo) async {
+                setState(() => _contactInfo = updatedInfo);
+                updateContactInfoOnServer(
+                  context: context,
+                  companyId: companyId,
+                  contactInfo: updatedInfo,
+                );
+                await _c.saveContactInfo(companyId, updatedInfo);
+              },
+              onTap: (category, value) => _handleContactTap(category, value),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

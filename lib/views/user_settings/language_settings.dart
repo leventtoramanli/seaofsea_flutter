@@ -1,3 +1,4 @@
+// lib/views/user_settings/language_settings.dart
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
@@ -6,6 +7,14 @@ class LanguageSettings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final c = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Glass panel renkleri (alpha tabanlı)
+    final glassBg = c.surface.withAlpha(220); // ~86% opak
+    final glassBorder = c.outlineVariant.withAlpha(120); // ince kenar
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -17,34 +26,38 @@ class LanguageSettings extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(15),
+                color: glassBg,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.white.withAlpha(20),
-                ),
+                border: Border.all(color: glassBorder),
               ),
-              child: const Column(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.language, size: 48, color: Colors.white),
-                  SizedBox(height: 16),
+                  Icon(
+                    Icons.language,
+                    size: 48,
+                    color: c.primary,
+                  ),
+                  const SizedBox(height: 16),
                   Text(
                     'Language Settings',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: c.onSurface,
                     ),
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
                     'Only English language is currently supported.',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white70,
-                    ),
                     textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: c.onSurfaceVariant,
+                    ),
                   ),
+                  const SizedBox(height: 16),
+                  // İstersen ileride buraya bir "Change language" butonu eklenebilir.
+                  // Şimdilik bilgi amaçlı bırakıyoruz.
+                  if (isDark) const SizedBox.shrink(),
                 ],
               ),
             ),

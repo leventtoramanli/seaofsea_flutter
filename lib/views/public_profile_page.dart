@@ -9,9 +9,10 @@ import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/permission_provider.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
+import 'package:seaofsea/widgets/online_images.dart';
 
 class PublicProfilePage extends StatefulWidget {
-  /// Argüman vermezsen kendi profilin açılır. Başkasını görmek için userId ver.
+  /// If userId is null, opens the current user's profile; otherwise shows a public profile.
   final int? userId;
   const PublicProfilePage({super.key, this.userId});
 
@@ -27,14 +28,13 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
     super.initState();
     final v1 = context.read<V1ApiManager>();
 
-    // Yalın param: sadece userId verilmişse gönder.
-    final Map<String, dynamic> params =
-        (widget.userId != null) ? {'id': widget.userId} : {};
+    final params =
+        (widget.userId != null) ? {'id': widget.userId} : <String, dynamic>{};
 
     _future = v1.call(
       module: 'profile',
       action: 'getProfile',
-      params: params, // boşsa backend kendi profilini döndürür
+      params: params, // empty => backend returns own profile
     );
   }
 
@@ -42,8 +42,11 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
   Widget build(BuildContext context) {
     final v1 = context.read<V1ApiManager>();
     final auth = context.read<AuthProvider>();
+    final theme = Theme.of(context);
+    final c = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
-    // baseUrl sonundaki / işaretini kaldırıp uploads ile birleştiriyoruz
+    // Normalize base URL (no trailing slash) for manual cover URL below
     final String base = v1.baseUrl.endsWith('/')
         ? v1.baseUrl.substring(0, v1.baseUrl.length - 1)
         : v1.baseUrl;
@@ -51,22 +54,32 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
     return FutureBuilder<Map<String, dynamic>>(
       future: _future,
       builder: (context, snap) {
+        // Always keep app layout consistent
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return CustomScaffold(
+            title: 'Profile',
+            body: const Center(child: CircularProgressIndicator()),
+          );
         }
         if (snap.hasError) {
-          return const Center(child: Text('Bir hata oluştu.'));
+          return CustomScaffold(
+            title: 'Profile',
+            body: const Center(child: Text('An unexpected error occurred.')),
+          );
         }
 
         final resp = snap.data ?? const {};
-        final ok = resp['success'] == true;
-        final data = (resp['data'] as Map<String, dynamic>?) ?? const {};
+        final ok = resp['success'] == true || resp.containsKey('data');
+        final data = (resp['data'] as Map<String, dynamic>?) ?? resp;
 
         if (!ok || data['id'] == null) {
           final msg = (resp['message']?.toString().trim().isNotEmpty ?? false)
               ? resp['message'].toString()
-              : 'Kullanıcı bilgisi alınamadı.';
-          return Center(child: Text(msg));
+              : 'Profile could not be loaded.';
+          return CustomScaffold(
+            title: 'Profile',
+            body: Center(child: Text(msg)),
+          );
         }
 
         final int? currentUserId =
@@ -74,11 +87,12 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
         final bool isOwnProfile =
             currentUserId != null && currentUserId == (data['id'] as int);
 
-        // Admin mi? (admin.access veya user.manage)
+        // Admin quick action permission
         final isAdmin = context.select<PermissionProvider, bool>(
           (p) => p.can('admin.access') || p.can('user.manage'),
         );
 
+        // --- Cover image (network or fallback asset) ---
         Widget buildCoverImage(dynamic fileNameRaw) {
           final String? fileName =
               (fileNameRaw is String && fileNameRaw.isNotEmpty)
@@ -92,7 +106,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                   width: double.infinity,
                   fit: BoxFit.cover,
                   placeholderFit: BoxFit.cover,
-                  fadeInDuration: const Duration(milliseconds: 350),
+                  fadeInDuration: const Duration(milliseconds: 300),
                 )
               : Image.asset(
                   'assets/cover.jpg',
@@ -100,15 +114,6 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                   width: double.infinity,
                   fit: BoxFit.cover,
                 );
-        }
-
-        // ---- FIX: Tipi sabitle (ImageProvider<Object>) ----
-        ImageProvider<Object> userImageProvider() {
-          final raw = data['user_image'];
-          if (raw is String && raw.isNotEmpty) {
-            return NetworkImage('$base/uploads/user/user/$raw');
-          }
-          return const AssetImage('assets/sailorHat.png');
         }
 
         final String fullName =
@@ -120,51 +125,75 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
           return 'No bio available.';
         })();
 
+        // Glass panel colors based on theme for legible text on image
+        final Color glassBg =
+            isDark ? c.surface.withAlpha(56) : c.surface.withAlpha(195);
+        final Color glassBorder =
+            c.outlineVariant.withAlpha(isDark ? 90 : 115);
+
         return CustomScaffold(
           title: isOwnProfile ? 'My Profile' : 'User Profile',
           body: Stack(
             children: [
+              // Cover
               buildCoverImage(data['cover_image']),
+
+              // Glass card block
               Padding(
                 padding: const EdgeInsets.only(top: 220),
                 child: ClipRRect(
                   borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(30)),
+                      const BorderRadius.vertical(top: Radius.circular(28)),
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(15),
+                        color: glassBg,
                         borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(30)),
-                        border: Border.all(color: Colors.white.withAlpha(20)),
+                            top: Radius.circular(28)),
+                        border: Border.all(color: glassBorder),
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundImage: userImageProvider(),
+                          // ---- Avatar (OnlineImage) ----
+                          OnlineImage(
+                            imagePath:
+                                'user/user/', // -> .../uploads/user/user/<name>
+                            imageName: (data['user_image'] ?? '').toString(),
+                            sizeW: 100,
+                            sizeH: 100,
+                            rounded: true,
+                            border: true,
+                            fallbackAsset: 'assets/sailorHat.png',
                           ),
                           const SizedBox(height: 12),
+
+                          // Name
                           Text(
                             fullName.isNotEmpty ? fullName : '—',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            bio,
-                            style: const TextStyle(color: Colors.white70),
                             textAlign: TextAlign.center,
                           ),
+
+                          const SizedBox(height: 8),
+
+                          // Bio
+                          Text(
+                            bio,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.textTheme.bodyMedium?.color
+                                  ?.withAlpha(217),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+
                           const SizedBox(height: 16),
-                          // Bu sayfa HER ZAMAN read-only.
+                          // (Public page is read-only by design)
                         ],
                       ),
                     ),
@@ -172,7 +201,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                 ),
               ),
 
-              // Owner ise: Edit (Settings'e gitsin)
+              // Top-right actions
               if (isOwnProfile)
                 Positioned(
                   top: 8,
@@ -183,8 +212,6 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                     icon: const Icon(Icons.edit),
                   ),
                 ),
-
-              // Owner değil + admin ise: Admin kısa yolu
               if (!isOwnProfile && isAdmin)
                 Positioned(
                   top: 8,
