@@ -6,17 +6,22 @@ import 'package:seaofsea/views/admin_dashboard.dart';
 import 'package:seaofsea/views/auth/auth_page.dart';
 import 'package:seaofsea/views/companies/announcements/company_announcements_page.dart';
 import 'package:seaofsea/views/companies/company_detail_page.dart';
+import 'package:seaofsea/views/companies/config/position_permissions_page.dart';
+import 'package:seaofsea/views/companies/pages/company_applications_page.dart';
+import 'package:seaofsea/views/companies/pages/company_job_list_page.dart';
 import 'package:seaofsea/views/companies/pages/company_notifications_page.dart';
 import 'package:seaofsea/views/companies/pages/company_setting_page.dart';
 import 'package:seaofsea/views/companies/pages/company_user_page.dart';
 import 'package:seaofsea/views/companies/pages/company_list_page.dart';
 import 'package:seaofsea/views/companies/pages/create_new_company_page.dart';
+import 'package:seaofsea/views/companies/pages/job_editor_page.dart';
 import 'package:seaofsea/views/companies/pages/join_company_page.dart';
 import 'package:seaofsea/views/companies/pages/manage_companies.dart';
 import 'package:seaofsea/views/companies/pages/manage_company_users.dart';
 import 'package:seaofsea/views/companies/update_company_page.dart';
 import 'package:seaofsea/views/home_page.dart';
 import 'package:seaofsea/views/companies/pages/job_application_page.dart';
+import 'package:seaofsea/views/jobs/jobs_explore_page.dart';
 import 'package:seaofsea/views/public_profile_page.dart';
 import 'package:seaofsea/views/user_settings/settings_page.dart';
 
@@ -125,9 +130,37 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
         builder: (context) => JoinCompanyPage(companyId: companyId),
       );
     case '/job_application':
+      {
+        final args = (settings.arguments as Map<String, dynamic>?) ?? {};
+        final int? companyId = args['company_id'] as int?;
+        final int? jobId = args['job_id'] as int?;
+        final String? companyName = args['company_name'] as String?;
+        return MaterialPageRoute(
+          builder: (context) => JobApplicationPage(
+            jobId: jobId!, // ← jobId ile başvuru
+            companyId: companyId,
+            companyName: companyName,
+          ),
+          settings: settings,
+        );
+      }
+
+    case '/job_editor':
+      {
+        final args = (settings.arguments as Map<String, dynamic>?) ?? {};
+        final int companyId = (args['company_id'] as int?) ?? 0;
+        final int? jobId = args['job_id'] as int?;
+        return MaterialPageRoute(
+          builder: (_) => JobEditorPage(companyId: companyId, jobId: jobId),
+          settings: settings,
+        );
+      }
+    case '/jobs_explore':
       return MaterialPageRoute(
-        builder: (context) => const JobApplicationPage(),
+        builder: (_) => const JobsExplorePage(),
+        settings: settings,
       );
+
     case '/company_users':
       final args = settings.arguments as Map<String, dynamic>?;
       final int? companyId = args?['company_id'];
@@ -145,11 +178,45 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
         settings: settings,
       );
     case '/company_announcements':
-      (ctx) {
-        final args = ModalRoute.of(ctx)!.settings.arguments as Map?;
-        return CompanyAnnouncementsPage(
-            companyId: (args?['company_id'] as int?) ?? 0);
-      };
+      {
+        final args = (settings.arguments as Map?) ?? {};
+        final companyId = (args['company_id'] as int?) ?? 0;
+
+        return MaterialPageRoute(
+          builder: (_) => CompanyAnnouncementsPage(companyId: companyId),
+          settings: settings,
+        );
+      }
+
+    case '/company_applications':
+      {
+        final args = (settings.arguments as Map?) ?? {};
+        final cid = (args['company_id'] as int?) ?? 0;
+        final status = args['status'] as String?;
+
+        return MaterialPageRoute(
+          builder: (_) => CompanyApplicationsPage(
+            companyId: cid,
+            initialStatus: status,
+          ),
+          settings: settings,
+        );
+      }
+
+    case '/company_job_list':
+      final args = (settings.arguments as Map<String, dynamic>?) ?? {};
+      final cid = (args['company_id'] as int?) ?? 0;
+      final status = args['status'] as String?;
+      return MaterialPageRoute(
+        builder: (_) =>
+            CompanyJobListPage(companyId: cid, initialStatus: status),
+        settings: settings,
+      );
+    case '/position_permissions':
+      return MaterialPageRoute(
+        builder: (_) => const PositionPermissionsPage(),
+        settings: settings,
+      );
 
     default:
       return MaterialPageRoute(

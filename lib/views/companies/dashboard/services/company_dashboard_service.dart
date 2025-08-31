@@ -187,7 +187,7 @@ class CompanyDashboardService {
     // Önce company_job modülü (varsa)
     try {
       final res1 = await api.call(
-        module: 'company_job',
+        module: 'companyjob',
         action: 'list',
         params: {
           'company_id': companyId,

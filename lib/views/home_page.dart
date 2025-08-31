@@ -27,12 +27,14 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _myCompanies = [];
   bool _loadingCompanies = false;
   bool get _hasCompanies => _myCompanies.isNotEmpty;
+  List<Map<String, dynamic>> _latestJobs = [];
+  bool _loadingLatestJobs = false;
 
   // KPI state (null => skeleton)
   int? _kpiNotifications;
   int? _kpiApplications;
   int? _kpiOpenJobs;
-  int? _kpiProfilePercent; // TODO: profil yüzdesi FE'de hesaplanacak
+  int? _kpiProfilePercent;
 
   // Placeholder duyurular (2.2.3)
   static const List<Map<String, String>> _announcements = [
@@ -49,6 +51,7 @@ class _HomePageState extends State<HomePage> {
     final userInfo = authProvider.userInfo;
 
     _fetchMyCompanies();
+    _fetchLatestJobs();
 
     if (userInfo != null) {
       final isVerified = userInfo['is_verified'];
@@ -226,6 +229,44 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _fetchLatestJobs() async {
+    setState(() => _loadingLatestJobs = true);
+    try {
+      final v1 = context.read<V1ApiManager>();
+      final res = await v1.call(
+        module: 'companyjob',
+        action: 'search',
+        params: {
+          'status': 'open',
+          'visibility': 'public',
+          'page': 1,
+          'perPage': 10,
+        },
+      );
+
+      final data = res['data'];
+      List items;
+      if (data is Map) {
+        items =
+            (data['items'] ?? data['jobs'] ?? data['results'] ?? []) as List;
+      } else if (data is List) {
+        items = data;
+      } else {
+        items = const [];
+      }
+
+      _latestJobs = items
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (e) {
+      _latestJobs = const [];
+      debugPrint('❌ _fetchLatestJobs error: $e');
+    } finally {
+      if (mounted) setState(() => _loadingLatestJobs = false);
+    }
+  }
+
   // ---- KPI Helpers ----
   Future<int> _fetchTotal({
     required String module,
@@ -271,17 +312,7 @@ class _HomePageState extends State<HomePage> {
       // 1) Bildirimler (sadece unread)
       final notif = await _tryTotals([
         (
-          module: 'company_notification',
-          action: 'list',
-          params: {
-            'only_unread': 1,
-            if (companyId != null) 'company_id': companyId,
-            'page': 1,
-            'perPage': 1,
-          }
-        ),
-        (
-          module: 'company_notifications',
+          module: 'Company_announcement',
           action: 'list',
           params: {
             'only_unread': 1,
@@ -294,7 +325,7 @@ class _HomePageState extends State<HomePage> {
 
       // 2) Başvurularım
       final apps = await _fetchTotal(
-        module: 'job',
+        module: 'companyjob',
         action: 'my_applications',
         params: {'status': 'submitted', 'page': 1, 'perPage': 1},
       );
@@ -303,7 +334,7 @@ class _HomePageState extends State<HomePage> {
       int openJobs = 0;
       if (_contextIsCompany && companyId != null) {
         openJobs = await _fetchTotal(
-          module: 'job',
+          module: 'companyjob',
           action: 'list',
           params: {
             'company_id': companyId,
@@ -383,6 +414,8 @@ class _HomePageState extends State<HomePage> {
                   _buildRecentRow(),
                   const SizedBox(height: 16),
                   _buildModuleSection(cardColor, borderColor, textColor),
+                  const SizedBox(height: 12),
+                  _buildLatestJobsSection(),
                 ],
               ),
             ),
@@ -937,6 +970,94 @@ class _HomePageState extends State<HomePage> {
             style: TextStyle(color: textColor),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLatestJobsSection() {
+    if (_loadingLatestJobs) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: const [
+              SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+              SizedBox(width: 12),
+              Text('Loading latest jobs…'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_latestJobs.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.work_outline),
+                const SizedBox(width: 8),
+                Text('Latest Jobs',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const Spacer(),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pushNamed(context, '/jobs_explore'),
+                  child: const Text('View all'),
+                ),
+              ],
+            ),
+            const Divider(height: 12),
+            ..._latestJobs.map((j) {
+              final id = int.tryParse('${j['id'] ?? j['job_id'] ?? 0}') ?? 0;
+              final title = (j['title'] ?? 'Untitled').toString();
+              final companyName =
+                  (j['company_name'] ?? j['company'] ?? '').toString();
+              final companyId = int.tryParse('${j['company_id'] ?? 0}') ?? 0;
+              final location = (j['location'] ?? j['city'] ?? '').toString();
+              final createdAt = (j['created_at'] ?? '').toString();
+
+              return ListTile(
+                dense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                leading: const Icon(Icons.badge_outlined),
+                title:
+                    Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text([
+                  if (companyName.isNotEmpty) companyName,
+                  if (location.isNotEmpty) '• $location',
+                  if (createdAt.isNotEmpty) '• $createdAt',
+                ].join('  ')),
+                trailing: OutlinedButton(
+                  onPressed: id <= 0
+                      ? null
+                      : () {
+                          Navigator.pushNamed(
+                            context,
+                            '/job_application',
+                            arguments: {
+                              'job_id': id,
+                              if (companyId > 0) 'company_id': companyId,
+                              if (companyName.isNotEmpty)
+                                'company_name': companyName,
+                            },
+                          );
+                        },
+                  child: const Text('Apply'),
+                ),
+              );
+            }),
+          ],
+        ),
       ),
     );
   }

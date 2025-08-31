@@ -37,6 +37,8 @@ class PermissionGate extends StatelessWidget {
     int? companyId,
   }) async {
     final v1 = context.read<V1ApiManager>();
+    debugPrint(
+        '[PermGate.check] -> code=$permissionCode, companyId=$companyId');
     final res = await v1.call(
       module: 'permission',
       action: 'check',
@@ -45,14 +47,17 @@ class PermissionGate extends StatelessWidget {
         if (companyId != null) 'company_id': companyId,
       },
     );
-    if (res['success'] == true) {
-      return _extractAllowed(res);
-    }
-    return false;
+    final ok = res['success'] == true;
+    final allowed = ok ? _extractAllowed(res) : false;
+    debugPrint(
+        '[PermGate.check] <- success=$ok, allowed=$allowed, msg=${res['message']}');
+    return allowed;
   }
 
   Future<bool> _checkPermission(BuildContext context) async {
     final v1 = context.read<V1ApiManager>();
+    debugPrint(
+        '[PermGate] call start: code=$permissionCode, companyId=$companyId');
     final res = await v1.call(
       module: 'permission',
       action: 'check',
@@ -61,23 +66,28 @@ class PermissionGate extends StatelessWidget {
         if (companyId != null) 'company_id': companyId,
       },
     );
-    if (res['success'] == true) {
-      return _extractAllowed(res);
-    }
-    return false;
+    final ok = res['success'] == true;
+    final allowed = ok ? _extractAllowed(res) : false;
+    debugPrint(
+        '[PermGate] call done: success=$ok, allowed=$allowed, msg=${res['message']}, raw=$res');
+    return allowed;
   }
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('[PermGate.build] building for code=$permissionCode companyId=$companyId wait=$wait');
     return FutureBuilder<bool>(
       future: _checkPermission(context),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
+          debugPrint('[PermGate.build] waiting... code=$permissionCode');
           return wait
               ? const Center(child: CircularProgressIndicator())
               : const SizedBox.shrink();
         }
-        return (snapshot.data == true) ? child : const SizedBox.shrink();
+        final allowed = snapshot.data == true;
+          debugPrint('[PermGate.build] done. code=$permissionCode allowed=$allowed');
+        return allowed ? child : const SizedBox.shrink();
       },
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:seaofsea/utils/permission_gate.dart';
 import 'package:seaofsea/widgets/online_images.dart';
 
 class CompanySettingsPage extends StatelessWidget {
@@ -38,6 +39,22 @@ class CompanySettingsPage extends StatelessWidget {
                           companyData['type'],
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
+                      PermissionGate(
+                        permissionCode: 'position.update',
+                        companyId: (companyData['company_id'] ??
+                            companyData['id']) as int?,
+                        wait:
+                            true, // izin kontrolü bitene kadar skeleton gizlesin
+                        child: ListTile(
+                          leading: const Icon(Icons.badge_outlined),
+                          title: const Text('Position Permissions'),
+                          subtitle: const Text(
+                              'Define default permissions per position'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.pushNamed(
+                              context, '/position_permissions'),
+                        ),
+                      ),
                     ],
                   ),
                 ),

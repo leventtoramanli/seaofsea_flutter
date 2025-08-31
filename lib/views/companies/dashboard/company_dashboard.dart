@@ -2,9 +2,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:seaofsea/utils/permission_gate.dart';
+import 'package:seaofsea/utils/permission_provider.dart';
+import 'package:seaofsea/views/companies/dashboard/services/applications_service.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/address_expandable_list.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/announcements_section.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/public_contact_strip.dart';
+import 'package:seaofsea/views/companies/widgets/company_app_counters.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:seaofsea/services/v1/v1_api_manager.dart';
@@ -18,7 +22,6 @@ import 'package:seaofsea/views/companies/dashboard/widgets/kpi_grid.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/workboard.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/people_snapshot_card.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/contact_summary_card.dart';
-import 'package:seaofsea/views/companies/dashboard/widgets/updates_card.dart';
 
 // Public widgets
 import 'package:seaofsea/views/companies/dashboard/widgets/public_hero.dart';
@@ -75,6 +78,128 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
         const SnackBar(content: Text('Cannot open the link')),
       );
     }
+  }
+
+  Future<void> _openNewAppDialog(BuildContext context) async {
+    final v1 = context.read<V1ApiManager>();
+    final apps = ApplicationsServiceV1(api: v1);
+
+    final jobCtrl = TextEditingController();
+    final userCtrl = TextEditingController();
+    final coverCtrl = TextEditingController();
+
+    bool loading = false;
+    String? error;
+
+    await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(builder: (ctx, setState) {
+          return AlertDialog(
+            title: const Text('New Application'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: jobCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Job Post ID',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // user_id opsiyonel: boş bırakırsan backend actor’u kullanır.
+                  TextField(
+                    controller: userCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Candidate User ID (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: coverCtrl,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Cover Letter (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(error!, style: const TextStyle(color: Colors.red)),
+                  ],
+                  if (loading) ...[
+                    const SizedBox(height: 12),
+                    const CircularProgressIndicator(),
+                  ]
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.icon(
+                icon: const Icon(Icons.add_task_outlined),
+                label: const Text('Create'),
+                onPressed: loading
+                    ? null
+                    : () async {
+                        final jid = int.tryParse(jobCtrl.text.trim());
+                        if (jid == null || jid <= 0) {
+                          setState(() =>
+                              error = 'Please enter a valid Job Post ID.');
+                          return;
+                        }
+
+                        setState(() {
+                          loading = true;
+                          error = null;
+                        });
+
+                        try {
+                          final uid = int.tryParse(userCtrl.text.trim());
+                          final res = await apps.create(
+                            companyId: widget.companyId,
+                            jobPostId: jid,
+                            userId: uid, // null ise backend actor’u kullanır
+                            coverLetter: coverCtrl.text.trim().isEmpty
+                                ? null
+                                : coverCtrl.text.trim(),
+                          );
+
+                          if ((res['success'] == true) || res['id'] != null) {
+                            if (!ctx.mounted) return;
+                            Navigator.pop(ctx, true);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('Application created')),
+                              );
+                            }
+                          } else {
+                            setState(() => error =
+                                (res['message'] ?? 'Create failed').toString());
+                          }
+                        } catch (e) {
+                          setState(() => error = 'Error: $e');
+                        } finally {
+                          if (!ctx.mounted) return;
+                          setState(() => loading = false);
+                        }
+                      },
+              ),
+            ],
+          );
+        });
+      },
+    );
   }
 
   void _copyToClipboard(String text, {String label = 'Copied to clipboard'}) {
@@ -142,6 +267,12 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
       child: Consumer<DashboardController>(
         builder: (context, ctrl, _) {
           final s = ctrl.state;
+
+          final pp = PermissionProvider.maybeOf(context);
+          final canSeeApps = (pp?.can('application.view') ?? false) ||
+              (pp?.can('application.review') ?? false) ||
+              (pp?.can('application.manage') ?? false) ||
+              (pp?.can('job.applications.view') ?? false);
 
           final addressItems =
               s.contactSummary['addresses'] ?? const <Map<String, String>>[];
@@ -326,6 +457,8 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                       ),
                     ),
                   ),
+                // 🔧 Duplicate FAB kaldırıldı; tek FAB aşağıdaki helper ile geliyor
+                _buildNewAppFab(),
               ],
             );
           }
@@ -414,10 +547,9 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                                     value: ctrl.totalPendingLike,
                                     onTap: () => Navigator.pushNamed(
                                       context,
-                                      '/company_users',
+                                      '/company_applications',
                                       arguments: {
                                         'company_id': widget.companyId,
-                                        'status': 'pending',
                                       },
                                     ),
                                   ),
@@ -454,6 +586,19 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                                 ],
                               ),
                               const SizedBox(height: 16),
+                              if (canSeeApps)
+                                CompanyAppCounters(
+                                  companyId: widget.companyId,
+                                  onTapStatus: (status) => Navigator.pushNamed(
+                                    context,
+                                    '/company_applications',
+                                    arguments: {
+                                      'company_id': widget.companyId,
+                                      'status': status, // örn 'submitted'
+                                    },
+                                  ),
+                                ),
+                              const SizedBox(height: 16),
                               Workboard(
                                 role: s.role,
                                 loading: s.loading,
@@ -461,11 +606,8 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                                 onViewAllApplications: () =>
                                     Navigator.pushNamed(
                                   context,
-                                  '/company_users',
-                                  arguments: {
-                                    'company_id': widget.companyId,
-                                    'status': 'pending',
-                                  },
+                                  '/company_applications',
+                                  arguments: {'company_id': widget.companyId},
                                 ),
                                 onViewAllMessages: () => Navigator.pushNamed(
                                   context,
@@ -522,10 +664,9 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                               value: ctrl.totalPendingLike,
                               onTap: () => Navigator.pushNamed(
                                 context,
-                                '/company_users',
+                                '/company_applications',
                                 arguments: {
                                   'company_id': widget.companyId,
-                                  'status': 'pending',
                                 },
                               ),
                             ),
@@ -558,16 +699,28 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                           ],
                         ),
                         const SizedBox(height: 16),
+                        if (canSeeApps)
+                          CompanyAppCounters(
+                            companyId: widget.companyId,
+                            onTapStatus: (status) => Navigator.pushNamed(
+                              context,
+                              '/company_applications',
+                              arguments: {
+                                'company_id': widget.companyId,
+                                'status': status, // örn 'submitted'
+                              },
+                            ),
+                          ),
+                        const SizedBox(height: 16),
                         Workboard(
                           role: s.role,
                           loading: s.loading,
                           applicationCounts: s.applicationCounts,
                           onViewAllApplications: () => Navigator.pushNamed(
                             context,
-                            '/company_users',
+                            '/company_applications',
                             arguments: {
                               'company_id': widget.companyId,
-                              'status': 'pending',
                             },
                           ),
                           onViewAllMessages: () => Navigator.pushNamed(
@@ -600,11 +753,29 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                         const SizedBox(height: 16),
                       ],
                     ),
+                  _buildNewAppFab(),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildNewAppFab() {
+    return Positioned(
+      right: 16,
+      bottom: 16,
+      child: PermissionGate(
+        permissionCode: 'application.manage',
+        companyId: widget.companyId,
+        wait: true,
+        child: FloatingActionButton.extended(
+          icon: const Icon(Icons.assignment_add),
+          label: const Text('New Application'),
+          onPressed: () => _openNewAppDialog(context),
+        ),
       ),
     );
   }
