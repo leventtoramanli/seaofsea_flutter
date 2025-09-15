@@ -32,10 +32,12 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
   }
 
   Future<void> _fetch() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
+    setState(
+      () {
+        _busy = true;
+        _error = null;
+      },
+    );
     try {
       // Birleşik özet: ilan + başvuru istatistikleri + son başvurular
       final res = await RecruitmentServiceV1.postOverview(
@@ -54,7 +56,7 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
             ? List<dynamic>.from(data['recent_applications'] as List)
             : const [];
       } else {
-        _error = 'Geçersiz cevap';
+        _error = 'Response data is null or invalid';
       }
     } catch (e) {
       // 403 olabilir (app.view_company izni yok). Fallback: sadece ilan detayını getir.
@@ -62,18 +64,22 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
         final res2 = await RecruitmentServiceV1.postDetail(id: widget.postId);
         final Map? data2 =
             (res2 is Map && res2['data'] is Map) ? (res2['data'] as Map) : null;
-        _post = (data2 != null) ? Map<String, dynamic>.from(data2) : null;
+        _post = (data2 != null && data2['post'] is Map)
+            ? Map<String, dynamic>.from(data2['post'] as Map)
+            : null;
         _appStats = null;
         _recentApps = const [];
-        _error = 'Başvuru özetine erişim yok (sadece ilan bilgisi).';
+        _error = 'Not authorized to view applications';
       } catch (e2) {
-        _error = 'Yüklenemedi: $e2';
+        _error = 'Faşled to load: $e2';
       }
     } finally {
       if (mounted)
-        setState(() {
-          _busy = false;
-        });
+        setState(
+          () {
+            _busy = false;
+          },
+        );
     }
   }
 
@@ -103,20 +109,27 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
   @override
   Widget build(BuildContext context) {
     final post = _post ?? const {};
-    final title = (post['title'] ?? 'İlan').toString();
+    final title = (post['title'] ?? 'Post').toString();
     final status = (post['status'] ?? '').toString();
     final companyId = _toInt(post['company_id']);
     final createdAt = (post['created_at'] ?? '').toString();
     final location = (post['location'] ?? '').toString();
-    final empType = (post['employment_type'] ?? '').toString();
+    final empTypes = post['employment_type'].toString();
     final desc = (post['description'] ?? '').toString();
+
+    String humanize(String code) => code
+        .replaceAll('_', ' ')
+        .split(' ')
+        .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+        .join(' ');
+    final empType = empTypes.isEmpty ? '' : humanize(empTypes);
 
     return CustomScaffold(
       title: 'Job Post #${widget.postId}',
       body: _busy && _post == null
           ? const Center(child: CircularProgressIndicator())
           : _post == null
-              ? Center(child: Text(_error ?? 'Kayıt bulunamadı'))
+              ? Center(child: Text(_error ?? 'Record not found'))
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(12),
                   child: Column(
@@ -134,19 +147,18 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
                                       Theme.of(context).textTheme.titleLarge),
                               const SizedBox(height: 8),
                               Wrap(spacing: 8, runSpacing: 8, children: [
-                                Chip(label: Text('Durum: $status')),
+                                Chip(label: Text('Status: $status')),
                                 if (companyId > 0)
-                                  Chip(label: Text('Şirket #$companyId')),
+                                  Chip(label: Text('Company #$companyId')),
                               ]),
                               const SizedBox(height: 12),
                               _kv('Lokasyon',
                                   location.isEmpty ? '-' : location),
-                              _kv('İstihdam Türü',
-                                  empType.isEmpty ? '-' : empType),
-                              _kv('Oluşturma',
+                              _kv('Work type', empType.isEmpty ? '-' : empType),
+                              _kv('Created at',
                                   createdAt.isEmpty ? '-' : createdAt),
                               const SizedBox(height: 8),
-                              if (desc.isNotEmpty) _kv('Açıklama', desc),
+                              if (desc.isNotEmpty) _kv('Description', desc),
                               if (_error != null)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8),
@@ -169,24 +181,25 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Başvuru Özeti',
+                                Text('Application Stats',
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium),
                                 const SizedBox(height: 8),
                                 Wrap(spacing: 8, runSpacing: 8, children: [
-                                  _chip('Toplam', _toInt(_appStats!['total']),
+                                  _chip('Total', _toInt(_appStats!['total']),
                                       icon: Icons.summarize_outlined),
-                                  _chip('Aktif', _toInt(_appStats!['active']),
+                                  _chip('Active', _toInt(_appStats!['active']),
                                       icon: Icons.timelapse_outlined),
                                 ]),
                                 const SizedBox(height: 6),
-                                Builder(builder: (ctx) {
-                                  final Map by =
-                                      (_appStats!['by_status'] is Map)
-                                          ? (_appStats!['by_status'] as Map)
-                                          : {};
-                                  return Wrap(
+                                Builder(
+                                  builder: (ctx) {
+                                    final Map by =
+                                        (_appStats!['by_status'] is Map)
+                                            ? (_appStats!['by_status'] as Map)
+                                            : {};
+                                    return Wrap(
                                       spacing: 8,
                                       runSpacing: 8,
                                       children: [
@@ -204,8 +217,10 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
                                             'Rejected', _toInt(by['rejected'])),
                                         _chip('Withdrawn',
                                             _toInt(by['withdrawn'])),
-                                      ]);
-                                }),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ],
                             ),
                           ),
@@ -220,13 +235,13 @@ class _JobPostDetailPageState extends State<JobPostDetailPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Son Başvurular',
+                                Text('Last Applications',
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleMedium),
                                 const SizedBox(height: 8),
                                 if (_recentApps.isEmpty)
-                                  const Text('Kayıt yok')
+                                  const Text('No recent applications')
                                 else
                                   ListView.separated(
                                     shrinkWrap: true,

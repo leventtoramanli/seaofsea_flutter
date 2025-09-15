@@ -3,10 +3,12 @@ import 'package:seaofsea/services/v1/recruitment_service.dart';
 
 class CompanyApplicationsPage extends StatefulWidget {
   final int companyId;
+  final String? initialStatus;
 
   const CompanyApplicationsPage({
     super.key,
     required this.companyId,
+    this.initialStatus,
   });
 
   @override
@@ -42,6 +44,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
   @override
   void initState() {
     super.initState();
+    _statusFilter = widget.initialStatus;
     _fetch();
   }
 
@@ -75,7 +78,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
         _total = total;
       });
     } catch (e) {
-      _snack('Listeleme hatası: $e');
+      _snack('List error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -88,7 +91,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Başvuru Statüsü'),
+        title: const Text('Status of Application'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -101,7 +104,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
                 );
               }).toList(),
               onChanged: (v) => picked = v,
-              decoration: const InputDecoration(labelText: 'Yeni statü'),
+              decoration: const InputDecoration(labelText: 'New Status'),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -109,14 +112,14 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
               maxLines: 3,
               decoration: const InputDecoration(
                 labelText: 'Not (opsiyonel)',
-                hintText: 'Değişiklik notu...',
+                hintText: 'Custom note...',
               ),
             ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
               if (picked == null) return;
@@ -124,7 +127,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
               await _updateStatus(appId, picked!,
                   noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim());
             },
-            child: const Text('Kaydet'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -140,9 +143,9 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
         note: note,
       );
       await _fetch();
-      _snack('Statü güncellendi → $newStatus');
+      _snack('Status updated → $newStatus');
     } catch (e) {
-      _snack('Statü güncelleme hatası: $e');
+      _snack('Statu update error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -153,18 +156,18 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reviewer Ata'),
+        title: const Text('Assign Reviewer'),
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            labelText: 'Kullanıcı ID',
+            labelText: 'User ID',
             hintText: 'ör. 123',
           ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
               final id = int.tryParse(ctrl.text.trim());
@@ -172,7 +175,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
               Navigator.pop(ctx);
               await _assignReviewer(appId, id);
             },
-            child: const Text('Ata'),
+            child: const Text('Assign'),
           ),
         ],
       ),
@@ -186,9 +189,9 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
         applicationId: appId,
         reviewerUserId: reviewerUserId,
       );
-      _snack('Reviewer atandı: $reviewerUserId');
+      _snack('Reviewer assigned: $reviewerUserId');
     } catch (e) {
-      _snack('Reviewer atama hatası: $e');
+      _snack('Reviewer assign error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -199,17 +202,17 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('İç Not Ekle'),
+        title: const Text('Add Note'),
         content: TextField(
           controller: ctrl,
           maxLines: 4,
           decoration: const InputDecoration(
-            hintText: 'Not metni...',
+            hintText: 'Text of note...',
           ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
               final text = ctrl.text.trim();
@@ -217,7 +220,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
               Navigator.pop(ctx);
               await _addNote(appId, text);
             },
-            child: const Text('Kaydet'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -228,9 +231,9 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
     setState(() => _busy = true);
     try {
       await RecruitmentServiceV1.appAddNote(applicationId: appId, note: text);
-      _snack('Not eklendi');
+      _snack('Not added.');
     } catch (e) {
-      _snack('Not ekleme hatası: $e');
+      _snack('Add note error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -276,7 +279,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
         ),
       );
     } catch (e) {
-      _snack('Notları çekme hatası: $e');
+      _snack('Show notes error: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -291,7 +294,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Başvurular (Şirket)'),
+        title: const Text('Company Applications'),
       ),
       body: Column(
         children: [
@@ -310,7 +313,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
                     items: _statuses
                         .map((s) => DropdownMenuItem<String?>(
                               value: s,
-                              child: Text(s == null ? 'Tümü' : s),
+                              child: Text(s == null ? 'All' : s),
                             ))
                         .toList(),
                     onChanged: (v) {
@@ -321,7 +324,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
                       _fetch();
                     },
                     decoration: const InputDecoration(
-                      labelText: 'Durum',
+                      labelText: 'Status',
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -359,7 +362,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
             child: _busy && _items.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : _items.isEmpty
-                    ? const Center(child: Text('Kayıt bulunamadı'))
+                    ? const Center(child: Text('No applications found.'))
                     : ListView.separated(
                         itemCount: _items.length,
                         separatorBuilder: (_, __) => const Divider(height: 1),
@@ -375,7 +378,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
                           return ListTile(
                             leading:
                                 CircleAvatar(child: Text((i + 1).toString())),
-                            title: Text('Başvuru #$id  •  Kullanıcı #$userId',
+                            title: Text('Application #$id  •  User #$userId',
                                 maxLines: 1, overflow: TextOverflow.ellipsis),
                             subtitle:
                                 Text('Job #$jobPostId • $status • $createdAt'),
@@ -384,19 +387,19 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
                               children: [
                                 // (İstersen PermissionGate ile sarmala: recruitment.app.note.add, .assign, .status.update)
                                 IconButton(
-                                  tooltip: 'Not ekle',
+                                  tooltip: 'Add Note',
                                   onPressed:
                                       _busy ? null : () => _addNoteDialog(id),
                                   icon: const Icon(Icons.note_add_outlined),
                                 ),
                                 IconButton(
-                                  tooltip: 'Notları gör',
+                                  tooltip: 'Notes',
                                   onPressed:
                                       _busy ? null : () => _showNotes(id),
                                   icon: const Icon(Icons.notes_outlined),
                                 ),
                                 IconButton(
-                                  tooltip: 'Reviewer ata',
+                                  tooltip: 'Assign Reviewer',
                                   onPressed: _busy
                                       ? null
                                       : () => _assignReviewerDialog(id),
@@ -404,7 +407,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
                                       Icons.person_add_alt_1_outlined),
                                 ),
                                 IconButton(
-                                  tooltip: 'Statü',
+                                  tooltip: 'Status',
                                   onPressed: _busy
                                       ? null
                                       : () => _updateStatusDialog(id, status),
@@ -425,7 +428,7 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    tooltip: 'Önceki',
+                    tooltip: 'Previous',
                     onPressed: (_page > 1 && !_busy)
                         ? () {
                             setState(() => _page--);
@@ -434,9 +437,9 @@ class _CompanyApplicationsPageState extends State<CompanyApplicationsPage> {
                         : null,
                     icon: const Icon(Icons.chevron_left),
                   ),
-                  Text('$_page / $_pages (Toplam: $_total)'),
+                  Text('$_page / $_pages (Total: $_total)'),
                   IconButton(
-                    tooltip: 'Sonraki',
+                    tooltip: 'Next',
                     onPressed: (_page < _pages && !_busy)
                         ? () {
                             setState(() => _page++);

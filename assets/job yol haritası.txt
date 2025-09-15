@@ -1,0 +1,123 @@
+Faz 0 — Temeller (altyapı)
+
+✅ Veritabanı şeması: applications, application_status_history, application_notes, ilişki: application → employment.
+
+✅ Yetki/rol seti: application.view/review/manage/..., interview schedule, export, delete vs.
+
+✅ Backend modül iskeleti: Recruitment/Applications handler ve temel uçlar.
+
+✅ Flutter altyapısı: navigasyon, tema, temel scaffold’lar.
+
+DoD: Şema migrate ediliyor, feature flag’ler açık/kapalı deneniyor, en az 1 uçtan 200 OK dönüyor.
+
+Faz 1 — Aday tarafı (MVP)
+
+✅ İş İlanlarını Keşfet
+
+Liste + detay görünümü.
+
+DoD: İlanlar arama/filtre ile açılıyor, detay sayfası sorunsuz.
+
+🟡 Başvuru Oluştur (Create Application)
+
+Form: CV snapshot, ön yazı, ekler (backend alanları hazır).
+
+DoD: Başvuruyu POST edip “submitted” durumda oluşturuyor; doğrulama/hata mesajları düzgün.
+
+⏳ “Başvurularım” (My Applications)
+
+Liste + detay + zaman çizgisi (status history görünür).
+
+DoD: Aday, tüm başvurularını/statülerini tek sayfada görüyor; detayda notlar/ekler okunabilir.
+
+⏳ Başvuruyu Geri Çek (Withdraw)
+
+Adayın kendi başvurusunu withdrawn durumuna alması.
+
+DoD: Tek tıkla withdraw; geri alınamaz uyarısı, audit kaydı.
+
+⏳ Bildirimler
+
+Statü değişiminde push/e-posta bildirimi (min. e-posta).
+
+DoD: Örn. submitted→under_review gerçekleşince aday mail alır.
+
+Faz 2 — Firma tarafı (MVP)
+
+✅ Başvuruları Görüntüle & İncele
+
+Liste + detay, pipeline görünümü; temel sayaçlar (dashboard mini-kpi).
+
+DoD: Statü okunur; temel sayım doğru.
+
+✅ Durum Yönetimi (Pipeline Actions)
+
+submitted → under_review → shortlisted → interview → offered → hired/rejected.
+
+DoD: Her adım tek tıkla değişiyor; status history yazılıyor.
+
+✅ Notlar & İç İletişim
+
+application_notes üzerinden iç not.
+
+DoD: Not ekleme/silme, kim ekledi zamanı ile kaydedilir.
+
+⏳ Gelişmiş Filtre & Etiketleme
+
+Tag, kaynak, tarih aralığı, durum çoklu seçimi; arayüzde hızlı filtreler.
+
+DoD: Liste 1000+ kayıtta hızlı; filtreler URL parametreli (paylaşılabilir).
+
+⏳ Toplu İşlemler
+
+Çoklu seçim → statü taşıma, reviewer atama.
+
+DoD: 50+ kayıt seçiliyken işlemler tamamlanıyor; kısmi hata raporu var.
+
+⏳ Mülakat Planlama UI
+
+Zaman seçimi, toplantı linki, katılımcı ekleme; adaya bildirim.
+
+DoD: Interview slot’ı kaydolur, aday ve reviewer mail alır.
+
+⏳ Mesajlaşma (Aday ile)
+
+“Adaya mesaj” UX’i (izin: application.message) + şablonlar.
+
+DoD: Mesajlar application timeline’da görülebilir.
+
+⏳ Dışa Aktarım / Raporlama
+
+CSV/XLSX export (izin var), basit raporlar.
+
+DoD: Aktarım filtrelenmiş veri setini veriyor; tarih/sütun seçimi.
+
+Faz 3 — İyileştirmeler & güvenlik
+
+⏳ Ek Önizleme & Virüs tarama (ekleri indir/önizle).
+
+⏳ GDPR/Unutulma: Kişisel veriyi maskleme/silme akışı.
+
+⏳ Audit & Log: Tüm kritik aksiyonlar (status change, message, export).
+
+⏳ Performans: Liste/sorgu optimizasyonu, sayfalama/ui iskeleti.
+
+DoD: 95. yüzdelik yanıt süreleri hedeflenen aralıkta; temel güvenlik testleri geçer.
+
+Faz 4 — Test & DevOps
+
+⏳ E2E senaryolar: Aday başvuru → şirket inceleme → hire.
+
+⏳ Seed veriler: Demo şirket + 10 ilan + 50 başvuru.
+
+⏳ Hata durumları: Oturum kapanırken açık editör (logout döngüsü gibi) için guard’lar.
+
+⏳ Sürüm/Çevre: Staging feature flags, error reporting (Sentry vb.)
+
+DoD: Tüm kritik akışlar için e2e yeşil; logout, ağ kesintisi gibi köşe durumları stabil.
+
+Özet durum (bugün)
+
+Tamam: Şema, izinler, backend modül çekirdeği; firma tarafı temel görüntüleme & pipeline; aday tarafı iş keşfi, CV ekranları.
+
+Eksik: Aday “Başvurularım” + Withdraw; firma tarafı gelişmiş filtre/etiket, toplu işlemler, mesajlaşma & mülakat UI, export; bildirimler; bazı köşe durum guard’ları (ör. edit sayfasında logout döngüsü).

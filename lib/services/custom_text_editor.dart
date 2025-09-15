@@ -1,3 +1,4 @@
+// lib/services/custom_text_editor.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
@@ -50,20 +51,23 @@ final Map<String, bool> minimalToolbarButtons = {
   'showItalicButton': true,
   'showUnderLineButton': true,
 };
+
 final Map<String, bool> maximalToolbarButtons = {
   for (var key in defaultToolbarButtons.keys) key: true,
 };
+
 Map<String, bool> buildCustomToolbarButtons({
   required Map<String, bool> base,
   Map<String, bool>? override,
 }) {
   final merged = Map<String, bool>.from(base);
-  if (override != null) {
-    merged.addAll(override); // Eklenenler veya değiştirilenler
-  }
+  if (override != null) merged.addAll(override);
   return merged;
 }
 
+/// =======================================
+/// EDITÖR (mevcut davranış korunuyor)
+/// =======================================
 class QuillTextEditor extends StatefulWidget {
   final String? initialJsonDelta;
   final bool showAll;
@@ -107,6 +111,7 @@ class QuillTextEditorState extends State<QuillTextEditor> {
       ),
     );
 
+    // (Mevcut mantık korunuyor)
     if (widget.initialJsonDelta != null &&
         widget.initialJsonDelta!.trim().startsWith('[')) {
       try {
@@ -135,9 +140,8 @@ class QuillTextEditorState extends State<QuillTextEditor> {
     bool showButton = false;
     final minHeight = widget.minHeight;
     final theme = Provider.of<ThemeProvider>(context, listen: true);
-    final buttons = widget.showAll
-        ? maximalToolbarButtons
-        : widget.toolbarButtons ?? minimalToolbarButtons;
+    final buttons =
+        widget.showAll ? maximalToolbarButtons : widget.toolbarButtons ?? minimalToolbarButtons;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,6 +235,104 @@ class QuillTextEditorState extends State<QuillTextEditor> {
               )
             : Container(),
       ],
+    );
+  }
+}
+
+/// =======================================================
+/// YENİ: VIEWER (Quill JSON -> okumak / göstermek için)
+/// =======================================================
+
+/// Quill Delta JSON veya düz metni kartta/detayda göstermek için küçük yardımcı.
+String quillDeltaToPlainText(String? raw) {
+  final txt = (raw ?? '').trim();
+  if (txt.isEmpty) return '';
+  if (txt.startsWith('[')) {
+    try {
+      final doc = Document.fromJson(jsonDecode(txt));
+      // Quill'in kendi düz metin çıkarımı:
+      final plain = doc.toPlainText();
+      // Kart özetinde daha temiz dursun:
+      return plain.replaceAll(RegExp(r'\s+'), ' ').trim();
+    } catch (_) {
+      // JSON parse edilemediyse düz metne düş
+    }
+  }
+  return txt.replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+/// Read-only Quill gösterici.
+/// - `maxLines` verirsen kısa özet (Text ile clamp) gösterir.
+/// - `maxLines` vermezsen QuillEditor ile tam render yapar.
+/// - `fallbackPlainText` true ise JSON değilse düz metin gösterir.
+class QuillTextViewer extends StatelessWidget {
+  final String deltaJson;
+  final int? maxLines;
+  final bool dense;
+  final bool fallbackPlainText;
+
+  const QuillTextViewer({
+    super.key,
+    required this.deltaJson,
+    this.maxLines,
+    this.dense = false,
+    this.fallbackPlainText = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // Kısa özet isteniyorsa doğrudan düz metin olarak clamp et
+    if (maxLines != null) {
+      final preview = quillDeltaToPlainText(deltaJson);
+      if (preview.isEmpty) return const SizedBox.shrink();
+      return Text(
+        preview,
+        maxLines: maxLines,
+        overflow: TextOverflow.ellipsis,
+        style: (dense ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium),
+      );
+    }
+
+    // Tam render (read-only)
+    Document? doc;
+    if (deltaJson.trim().startsWith('[')) {
+      try {
+        doc = Document.fromJson(jsonDecode(deltaJson));
+      } catch (_) {
+        doc = null;
+      }
+    }
+
+    // JSON parse edilemediyse fallback
+    if (doc == null) {
+      if (!fallbackPlainText) return const SizedBox.shrink();
+      final plain = quillDeltaToPlainText(deltaJson);
+      if (plain.isEmpty) return const SizedBox.shrink();
+      return Text(
+        plain,
+        style: (dense ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium),
+      );
+    }
+
+    final controller = QuillController(
+      document: doc,
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+
+    return QuillEditor(
+      controller: controller,
+      focusNode: FocusNode(),
+      scrollController: ScrollController(),
+      config: const QuillEditorConfig(
+        readOnlyMouseCursor: MouseCursor.uncontrolled,
+        padding: EdgeInsets.zero,
+        scrollable: false, // kart içinde kendi boyunda kalsın
+        minHeight: 0,
+        autoFocus: false,
+        // embedBuilders: FlutterQuillEmbeds.editorBuilders(), // istersen aç
+      ),
     );
   }
 }

@@ -2,13 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:seaofsea/utils/permission_gate.dart';
 import 'package:seaofsea/utils/permission_provider.dart';
-import 'package:seaofsea/views/companies/dashboard/services/applications_service.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/address_expandable_list.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/announcements_section.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/public_contact_strip.dart';
-import 'package:seaofsea/views/companies/widgets/company_app_counters.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:seaofsea/services/v1/v1_api_manager.dart';
@@ -26,6 +23,10 @@ import 'package:seaofsea/views/companies/dashboard/widgets/contact_summary_card.
 // Public widgets
 import 'package:seaofsea/views/companies/dashboard/widgets/public_hero.dart';
 import 'package:seaofsea/views/companies/dashboard/widgets/mini_kpi_row.dart';
+
+// Recruitment
+import 'package:seaofsea/services/v1/recruitment_service.dart';
+import 'package:seaofsea/views/companies/dashboard/widgets/company_app_counters.dart';
 
 class CompanyDashboard extends StatefulWidget {
   final VoidCallback goToContactInfo;
@@ -53,7 +54,9 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
       companyId: widget.companyId,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _controller.loadAll(context: context);
+      _controller.loadAll(context: context).then((_) {
+        if (mounted) _controller.refreshOpenJobsPublic(context: context);
+      });
     });
   }
 
@@ -81,9 +84,6 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
   }
 
   Future<void> _openNewAppDialog(BuildContext context) async {
-    final v1 = context.read<V1ApiManager>();
-    final apps = ApplicationsServiceV1(api: v1);
-
     final jobCtrl = TextEditingController();
     final userCtrl = TextEditingController();
     final coverCtrl = TextEditingController();
@@ -165,7 +165,7 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
 
                         try {
                           final uid = int.tryParse(userCtrl.text.trim());
-                          final res = await apps.create(
+                          final res = await RecruitmentServiceV1.appCreate(
                             companyId: widget.companyId,
                             jobPostId: jid,
                             userId: uid, // null ise backend actor’u kullanır
@@ -174,8 +174,10 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                                 : coverCtrl.text.trim(),
                           );
 
-                          if ((res['success'] == true) || res['id'] != null) {
-                            if (!ctx.mounted) return;
+                          final ok = (res is Map && res['success'] == true) ||
+                              (res is Map && res['id'] != null);
+                          if (!ctx.mounted) return;
+                          if (ok) {
                             Navigator.pop(ctx, true);
                             if (mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -185,7 +187,9 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                             }
                           } else {
                             setState(() => error =
-                                (res['message'] ?? 'Create failed').toString());
+                                (res is Map && res['message'] != null)
+                                    ? res['message'].toString()
+                                    : 'Create failed');
                           }
                         } catch (e) {
                           setState(() => error = 'Error: $e');
@@ -268,11 +272,16 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
         builder: (context, ctrl, _) {
           final s = ctrl.state;
 
+          // Permission fallback: yeni ve eski kodları dene
           final pp = PermissionProvider.maybeOf(context);
-          final canSeeApps = (pp?.can('application.view') ?? false) ||
-              (pp?.can('application.review') ?? false) ||
-              (pp?.can('application.manage') ?? false) ||
-              (pp?.can('job.applications.view') ?? false);
+          final canSeeApps =
+              (pp?.can('recruitment.app.view_company') ?? false) ||
+                  (pp?.can('recruitment.app.manage') ?? false) ||
+                  (pp?.can('application.view') ?? false) ||
+                  (pp?.can('application.review') ?? false) ||
+                  (pp?.can('application.manage') ?? false) ||
+                  (pp?.can('job.applications.view') ?? false)||
+                  (pp?.can('recruitment.app.published') ?? false);
 
           final addressItems =
               s.contactSummary['addresses'] ?? const <Map<String, String>>[];
@@ -285,7 +294,7 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
           final canManage = _canManage(s.role);
           final isEmployee = _isEmployee(s.role);
 
-          // Kısa açıklama "about/description" alanlarından biri varsa
+          // Kısa açıklama
           String? shortDescription;
           final aboutRaw = s.detail?['about'] ?? s.detail?['description'];
           if (aboutRaw is String && aboutRaw.trim().isNotEmpty) {
@@ -457,13 +466,13 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                       ),
                     ),
                   ),
-                // 🔧 Duplicate FAB kaldırıldı; tek FAB aşağıdaki helper ile geliyor
-                _buildNewAppFab(),
+                _buildNewAppFab(), // FAB (koşullu)
               ],
             );
           }
 
-          // Çalışanlar için (admin/editor/viewer) mevcut düzen
+          debugPrint('openJobs: ${s.openJobs}');
+          // Çalışanlar için (admin/editor/viewer)
           return RefreshIndicator(
             onRefresh: () => ctrl.loadAll(context: context),
             child: SingleChildScrollView(
@@ -569,13 +578,19 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                                     icon: Icons.badge_outlined,
                                     title: 'Open Jobs',
                                     value: s.openJobs,
-                                    onTap: () => Navigator.pushNamed(
-                                      context,
-                                      '/company_job_list',
-                                      arguments: {
-                                        'company_id': widget.companyId
-                                      },
-                                    ),
+                                    onTap: () async {
+                                      await Navigator.pushNamed(
+                                        context,
+                                        '/company_job_list',
+                                        arguments: {
+                                          'company_id': widget.companyId
+                                        },
+                                      );
+                                      if (context.mounted) {
+                                        await ctrl.refreshOpenJobsPublic(
+                                            context: context);
+                                      }
+                                    },
                                   ),
                                   KpiTile(
                                     icon: Icons.group_add_outlined,
@@ -594,7 +609,7 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                                     '/company_applications',
                                     arguments: {
                                       'company_id': widget.companyId,
-                                      'status': status, // örn 'submitted'
+                                      'status': status,
                                     },
                                   ),
                                 ),
@@ -684,11 +699,17 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                               icon: Icons.badge_outlined,
                               title: 'Open Jobs',
                               value: s.openJobs,
-                              onTap: () => Navigator.pushNamed(
-                                context,
-                                '/company_job_list',
-                                arguments: {'company_id': widget.companyId},
-                              ),
+                              onTap: () async {
+                                await Navigator.pushNamed(
+                                  context,
+                                  '/company_job_list',
+                                  arguments: {'company_id': widget.companyId},
+                                );
+                                if (context.mounted) {
+                                  await ctrl.refreshOpenJobsPublic(
+                                      context: context);
+                                }
+                              },
                             ),
                             KpiTile(
                               icon: Icons.group_add_outlined,
@@ -707,7 +728,7 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
                               '/company_applications',
                               arguments: {
                                 'company_id': widget.companyId,
-                                'status': status, // örn 'submitted'
+                                'status': status,
                               },
                             ),
                           ),
@@ -764,18 +785,20 @@ class _CompanyDashboardState extends State<CompanyDashboard> {
   }
 
   Widget _buildNewAppFab() {
+    final pp = PermissionProvider.maybeOf(context);
+    final canCreate = (pp?.can('recruitment.app.create') ?? false) ||
+        (pp?.can('recruitment.app.manage') ?? false) ||
+        (pp?.can('application.manage') ?? false);
+
+    if (!canCreate) return const SizedBox.shrink();
+
     return Positioned(
       right: 16,
       bottom: 16,
-      child: PermissionGate(
-        permissionCode: 'application.manage',
-        companyId: widget.companyId,
-        wait: true,
-        child: FloatingActionButton.extended(
-          icon: const Icon(Icons.assignment_add),
-          label: const Text('New Application'),
-          onPressed: () => _openNewAppDialog(context),
-        ),
+      child: FloatingActionButton.extended(
+        icon: const Icon(Icons.assignment_add),
+        label: const Text('New Application'),
+        onPressed: () => _openNewAppDialog(context),
       ),
     );
   }

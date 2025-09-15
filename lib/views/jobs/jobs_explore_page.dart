@@ -54,7 +54,7 @@ class _JobsExplorePageState extends State<JobsExplorePage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Listeleme başarısız: $e')),
+          SnackBar(content: Text('Listed error: $e')),
         );
       }
     } finally {
@@ -67,7 +67,7 @@ class _JobsExplorePageState extends State<JobsExplorePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('İşleri Keşfet')),
+      appBar: AppBar(title: const Text('Discover Jobs')),
       body: Column(
         children: [
           // Arama
@@ -84,7 +84,7 @@ class _JobsExplorePageState extends State<JobsExplorePage> {
                     },
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
-                      hintText: 'Ara (başlık / açıklama)',
+                      hintText: 'Search (title / description)',
                       suffixIcon: IconButton(
                         onPressed: () {
                           _searchCtrl.clear();
@@ -113,7 +113,7 @@ class _JobsExplorePageState extends State<JobsExplorePage> {
             child: _busy && _items.isEmpty
                 ? const Center(child: CircularProgressIndicator())
                 : _items.isEmpty
-                    ? const Center(child: Text('İlan bulunamadı'))
+                    ? const Center(child: Text('No results'))
                     : ListView.separated(
                         itemCount: _items.length,
                         separatorBuilder: (_, __) => const Divider(height: 1),
@@ -129,7 +129,7 @@ class _JobsExplorePageState extends State<JobsExplorePage> {
                             title: Text(title,
                                 maxLines: 1, overflow: TextOverflow.ellipsis),
                             subtitle: Text(
-                              'Şirket: $companyId • Yayın: $createdAt\n${description.isEmpty ? '' : description}',
+                              'Company: $companyId • Created: $createdAt\n${description.isEmpty ? '' : description}',
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -149,7 +149,7 @@ class _JobsExplorePageState extends State<JobsExplorePage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   IconButton(
-                    tooltip: 'Önceki',
+                    tooltip: 'Previous',
                     onPressed: (_page > 1 && !_busy)
                         ? () {
                             setState(() => _page--);
@@ -158,9 +158,9 @@ class _JobsExplorePageState extends State<JobsExplorePage> {
                         : null,
                     icon: const Icon(Icons.chevron_left),
                   ),
-                  Text('$_page / $_pages (Toplam: $_total)'),
+                  Text('$_page / $_pages (Total: $_total)'),
                   IconButton(
-                    tooltip: 'Sonraki',
+                    tooltip: 'Next',
                     onPressed: (_page < _pages && !_busy)
                         ? () {
                             setState(() => _page++);

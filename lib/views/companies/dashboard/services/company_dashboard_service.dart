@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/widgets.dart';
+import 'package:seaofsea/services/v1/recruitment_service.dart';
 import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/views/companies/dashboard/models/announcement.dart';
 import 'package:seaofsea/views/companies/dashboard/models/dashboard_models.dart';
@@ -183,39 +184,39 @@ class CompanyDashboardService {
     };
   }
 
-  Future<int> fetchOpenJobs(int companyId, {BuildContext? context}) async {
-    // Önce company_job modülü (varsa)
+  Future<int> fetchPublishedCount(int companyId,
+      {BuildContext? context}) async {
     try {
-      final res1 = await api.call(
-        module: 'companyjob',
-        action: 'list',
-        params: {
-          'company_id': companyId,
-          'status': 'open',
-          'perPage': 1,
-          'page': 1,
-        },
-        context: context,
-      );
-      final data1 = res1['data'];
-      final t1 = _parseTotal(data1);
-      if (t1 > 0 || _hasTotalKey(data1)) return t1;
-    } catch (_) {}
+      debugPrint('fetchPublishedCount: companyId=$companyId');
+      return await RecruitmentServiceV1.countPublished(companyId: companyId);
+    } catch (_) {
+      return 0;
+    }
+  }
 
-    // Fallback: job modülü
+  Future<int> fetchOpenJobs(int companyId, {BuildContext? context}) async {
     try {
-      final res2 = await api.call(
-        module: 'job',
-        action: 'list',
-        params: {
-          'company_id': companyId,
-          'status': 'open',
-          'perPage': 1,
-          'page': 1,
-        },
-        context: context,
+      final res = await RecruitmentServiceV1.postList(
+        companyId: companyId,
+        status: 'published',
+        page: 1,
+        perPage: 1,
       );
-      return _parseTotal(res2['data']);
+
+      final data =
+          (res is Map && res['data'] is Map) ? (res['data'] as Map) : null;
+      if (data == null) return 0;
+
+      // standart: data.total varsa onu al, yoksa items.length
+      final total = data['total'];
+      if (total is int) return total;
+      if (total != null) {
+        final t = int.tryParse(total.toString());
+        if (t != null) return t;
+      }
+      final items = data['items'];
+      if (items is List) return items.length;
+      return 0;
     } catch (_) {
       return 0;
     }

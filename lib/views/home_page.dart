@@ -5,6 +5,7 @@ import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
+import 'package:seaofsea/widgets/open_jobs_tab.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -35,6 +36,24 @@ class _HomePageState extends State<HomePage> {
   int? _kpiApplications;
   int? _kpiOpenJobs;
   int? _kpiProfilePercent;
+
+  bool _infoBarExpanded = true;
+
+  final GlobalKey _bottomBarKey = GlobalKey();
+  double _bottomBarHeight = 0;
+  static const double _bottomBarHeightFallback = 56;
+
+  void _measureSize(GlobalKey key, void Function(double) setHeight) {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    final rb = ctx.findRenderObject() as RenderBox?;
+    if (rb == null) return;
+    final h = rb.size.height;
+    if (h > 0 && mounted) setState(() => setHeight(h));
+  }
+
+  void _measureBottomBar() =>
+      _measureSize(_bottomBarKey, (h) => _bottomBarHeight = h);
 
   // Placeholder duyurular (2.2.3)
   static const List<Map<String, String>> _announcements = [
@@ -103,6 +122,9 @@ class _HomePageState extends State<HomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 800), _animateInfoScroll);
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measureBottomBar();
+    });
   }
 
   @override
@@ -112,6 +134,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _animateInfoScroll() {
+    if (!_infoBarExpanded) return; // kapalıysa animasyon yok
     if (_infoScrollController.hasClients &&
         _infoScrollController.position.maxScrollExtent > 0) {
       _infoScrollController.animateTo(
@@ -234,10 +257,10 @@ class _HomePageState extends State<HomePage> {
     try {
       final v1 = context.read<V1ApiManager>();
       final res = await v1.call(
-        module: 'companyjob',
-        action: 'search',
+        module: 'recruitment',
+        action: 'app_list_for_user',
         params: {
-          'status': 'open',
+          'status': 'published',
           'visibility': 'public',
           'page': 1,
           'perPage': 10,
@@ -385,11 +408,6 @@ class _HomePageState extends State<HomePage> {
     final Color footerBorder =
         isDark ? Colors.white.withAlpha(30) : Colors.black.withAlpha(30);
 
-    final Color glassBackground =
-        isDark ? Colors.grey.withAlpha(15) : Colors.grey.withAlpha(40);
-    final Color glassBorder =
-        isDark ? Colors.white.withAlpha(20) : Colors.white.withAlpha(30);
-
     return CustomScaffold(
       title: 'Dashboard',
       body: Column(
@@ -417,61 +435,6 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 12),
                   _buildLatestJobsSection(),
                 ],
-              ),
-            ),
-          ),
-
-          // === (1) CAM GÖRÜNÜMLÜ HIZLI BİLGİ BAR ===
-          Container(
-            // değişiklik yapılacak alan bunun dışlında bir yere dokunmayalım
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(
-                top: BorderSide(color: footerBorder, width: 0.5),
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: glassBackground,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: glassBorder),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: SingleChildScrollView(
-                    controller: _infoScrollController,
-                    scrollDirection: Axis.horizontal,
-                    physics: const BouncingScrollPhysics(),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildFooterButton(
-                          icon: Icons.verified_user,
-                          label: 'Role: Admin',
-                          onTap: () {},
-                        ),
-                        _buildFooterButton(
-                          icon: Icons.directions_boat_filled,
-                          label: 'Fleet: 3 Ships',
-                          onTap: () {},
-                        ),
-                        _buildFooterButton(
-                          icon: Icons.assignment_turned_in_outlined,
-                          label: 'Tasks: 2 open',
-                          onTap: () {},
-                        ),
-                        _buildFooterButton(
-                          icon: Icons.message_outlined,
-                          label: 'Messages: 2 new',
-                          onTap: () {},
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               ),
             ),
           ),
@@ -677,9 +640,7 @@ class _HomePageState extends State<HomePage> {
               Expanded(child: Text(title)),
               if ((a['href'] ?? '').isNotEmpty)
                 TextButton(
-                  onPressed: () {
-                    // TODO: linke git
-                  },
+                  onPressed: () {},
                   child: const Text('Details'),
                 ),
             ],
@@ -773,7 +734,7 @@ class _HomePageState extends State<HomePage> {
   Widget _buildWorkQueueTabs(
       Color cardColor, Color borderColor, Color textColor) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Container(
         decoration: BoxDecoration(
           color: cardColor,
@@ -781,20 +742,28 @@ class _HomePageState extends State<HomePage> {
           border: Border.all(color: borderColor),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min, // 👈 eklendi
           children: [
             const TabBar(
               isScrollable: true,
               tabs: [
+                Tab(text: 'Open Jobs'),
                 Tab(text: 'Applications'),
                 Tab(text: 'Approvals'),
                 Tab(text: 'Messages'),
               ],
             ),
-            const Divider(height: 1),
+            const Divider(height: 0.5),
             SizedBox(
-              height: 220, // sabit yükseklik (placeholder)
-              child: const TabBarView(
-                children: [
+              // Expanded yerine sabit/sonlu yükseklik ver
+              height: 350, // ihtiyaca göre 360–560 arası deneyebilirsin
+              // const kaldırıldı, çünkü içinde stateful widget (OpenJobsTab) var
+              child: TabBarView(
+                // İstersen kaydırmayı kapat: physics: const NeverScrollableScrollPhysics(),
+                children: const [
+                  OpenJobsTab(
+                    fixedHeight: 220,
+                  ),
                   _EmptyListPlaceholder(label: 'Applications list'),
                   _EmptyListPlaceholder(label: 'Work/Items awaiting approval'),
                   _EmptyListPlaceholder(label: 'List of messages'),
@@ -826,9 +795,7 @@ class _HomePageState extends State<HomePage> {
         itemBuilder: (context, index) {
           return ActionChip(
             label: Text(chips[index]),
-            onPressed: () {
-              // TODO: ilgili sayfaya/filtreye git
-            },
+            onPressed: () {},
           );
         },
       ),

@@ -9,34 +9,17 @@ enum ApplicationStatus {
   waitingManagerApproval,
 }
 
-/// Dashboard ekranının tekil state modeli (immutable)
 @immutable
 class DashboardState {
   final bool loading;
   final String? error;
-
-  /// backend'in döndürdüğü rol bilgisi (bilgi amaçlı)
   final String role; // admin|editor|viewer|follower|none
-
-  /// Şirket detayı (company.detail payload)
   final Map<String, dynamic>? detail;
-
-  /// Başvuru bucket sayıları
   final Map<ApplicationStatus, int>? applicationCounts;
-
-  /// Onaylı üye sayısı
   final int membersApproved;
-
-  /// Açık ilan sayısı
   final int openJobs;
-
-  /// Takipçi sayısı
   final int followers;
-
-  /// Sağ kolon "People" listesi (ilk 3)
   final List<Map<String, dynamic>> topPeople;
-
-  /// İletişim özet (phones/emails/websites/addresses)
   final Map<String, List<Map<String, String>>> contactSummary;
 
   const DashboardState({
@@ -65,9 +48,12 @@ class DashboardState {
         contactSummary: <String, List<Map<String, String>>>{},
       );
 
+  // ---- Sentinel: error alanını “dokunma” ile “bilerek null yap” ayrımı
+  static const Object _noUpdate = Object();
+
   DashboardState copyWith({
     bool? loading,
-    String? error,
+    Object? error = _noUpdate, // String? bekliyoruz ama sentinel için Object?
     String? role,
     Map<String, dynamic>? detail,
     Map<ApplicationStatus, int>? applicationCounts,
@@ -79,7 +65,7 @@ class DashboardState {
   }) {
     return DashboardState(
       loading: loading ?? this.loading,
-      error: error,
+      error: identical(error, _noUpdate) ? this.error : error as String?,
       role: role ?? this.role,
       detail: detail ?? this.detail,
       applicationCounts: applicationCounts ?? this.applicationCounts,

@@ -1,4 +1,4 @@
-// ignore_for_file: use_build_context_synchronously
+// lib/views/companies/company_detail_page.dart
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -12,14 +12,12 @@ import 'package:seaofsea/views/companies/company_contact_info.dart';
 import 'package:seaofsea/views/companies/dashboard/company_dashboard.dart';
 import 'package:seaofsea/views/companies/company_helpers.dart';
 import 'package:seaofsea/views/companies/controllers/company_detail_controller.dart';
-import 'package:seaofsea/views/companies/utils/role_caps.dart';
 import 'package:seaofsea/views/companies/widgets/company_header.dart';
 import 'package:seaofsea/views/companies/widgets/company_people_sheet.dart';
 import 'package:seaofsea/views/companies/widgets/states/error_view.dart';
 import 'package:seaofsea/views/companies/widgets/states/loading_skeleton.dart';
 
 import 'package:seaofsea/widgets/custon_scaffold.dart';
-import 'package:seaofsea/widgets/online_images.dart';
 
 class CompanyDetailPage extends StatefulWidget {
   final Map<String, dynamic> companyData;
@@ -38,12 +36,13 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
   late CompanyService _companyService;
 
   int _currentPageIndex = 0;
+
+  // Role helpers (RoleCaps yerine)
   bool get isAdmin => _userRole == 'admin';
   bool get isEditor => _userRole == 'editor';
   bool get isViewer => _userRole == 'viewer';
   bool get isFollower => _userRole == 'follower';
   bool get isEmployee => isAdmin || isEditor || isViewer;
-  bool _typesSaving = false;
 
   List<Map<String, dynamic>> _allCompanyTypes = [];
   List<int> _selectedCompanyTypeIds = [];
@@ -95,51 +94,15 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
         _allCompanyTypes = _c.allTypes;
         _selectedCompanyTypeIds = _c.selectedTypeIds;
         _errorText = _c.error;
-        // Not: _currentPageIndex'i şimdilik controller’dan yönetmiyoruz.
       });
     });
 
     final companyId = _company['id'] ?? _company['company_id'];
     _c.init(companyId, initialTypeIds: _selectedCompanyTypeIds);
-
-    // DİKKAT: Controller zaten tüm veriyi çekiyor.
-    // Aşağıdaki üç satır kaldırıldı ki iki kez yükleme olmasın.
-    // _fetchUserRole();
-    // _fetchCompanyDetails();
-    // _fetchCompanyTypes(fetchAll: false);
-  }
-
-  // --- Safe helpers ---
-  List<Map<String, dynamic>> _parseItems(dynamic data) {
-    if (data is List) {
-      return data
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-    if (data is Map && data['items'] is List) {
-      final items = data['items'] as List;
-      return items
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
-          .toList();
-    }
-    return <Map<String, dynamic>>[];
-  }
-
-  Future<void> _fetchCompanyDetails() async {
-    final companyId = _company['id'] ?? _company['company_id'];
-    await _c.refreshAll(companyId);
-  }
-
-  Future<void> _fetchUserRole() async {
-    final companyId = _company['id'] ?? _company['company_id'];
-    await _c.refreshAll(companyId);
   }
 
   Future<void> _fetchCompanyTypes({bool fetchAll = false}) async {
     final companyId = _company['id'] ?? _company['company_id'];
-    // fetchAll paramını şimdilik gözardı ediyoruz; controller zaten seçili ID’lere göre getiriyor.
     await _c.refreshAll(companyId);
   }
 
@@ -148,6 +111,7 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
       await _fetchCompanyTypes(fetchAll: true);
     }
     handleAddCompanyType(
+      // ignore: use_build_context_synchronously
       context: context,
       allTypes: _allCompanyTypes,
       selectedIds: _selectedCompanyTypeIds,
@@ -160,12 +124,10 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
   Future<void> _updateCompanyTypesOptimistic(List<int> newIds) async {
     final companyId = _company['id'] ?? _company['company_id'];
     final prevIds = List<int>.from(_selectedCompanyTypeIds);
-    bool undone = false;
 
     // 1) UI’yi anında güncelle
     setState(() {
       _selectedCompanyTypeIds = newIds;
-      _typesSaving = true;
     });
 
     // 2) Snackbar + Undo
@@ -178,9 +140,7 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () async {
-            undone = true;
             setState(() => _selectedCompanyTypeIds = prevIds);
-            // Sunucuya geri almayı gönder
             await _c.saveTypes(companyId, prevIds);
           },
         ),
@@ -189,21 +149,18 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
 
     // 3) Sunucuya kaydı gönder
     final ok = await _c.saveTypes(companyId, newIds);
-    setState(() => _typesSaving = false);
 
     if (!ok) {
       // Kaydetme başarısız → geri al ve kullanıcıyı bilgilendir
       setState(() => _selectedCompanyTypeIds = prevIds);
       messenger.showSnackBar(
-        SnackBar(content: Text('❌ ${'Update failed. Reverted.'}')),
+        const SnackBar(content: Text('❌ Update failed. Reverted.')),
       );
       return;
     }
 
-    // 4) Snackbar kapanana kadar bekle; Undo’ya basıldıysa yukarıda zaten geri alındı
+    // 4) Snackbar kapanana kadar bekle (Undo’ya basıldıysa yukarıda geri alınır)
     await controller.closed;
-
-    // Not: Undo’ya basılmadıysa burada ekstra bir şey yapmamıza gerek yok.
   }
 
   Future<void> _showModalC(
@@ -214,14 +171,12 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
     final companyId =
         widget.companyData['id'] ?? widget.companyData['company_id'];
 
-    // Minimal: service varsa onu kullan; yoksa v1.call ile de olurdu.
     Future<List<Map<String, dynamic>>> loader() async {
       if (action == 'get_company_followers') {
         return await _companyService.getCompanyFollowers(companyId);
       } else if (action == 'members_list') {
         return await _companyService.getCompanyMembers(companyId);
       } else {
-        // Beklenmeyen action → boş liste
         return <Map<String, dynamic>>[];
       }
     }
@@ -250,9 +205,6 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = MediaQuery.of(context).size.width > 900;
-    final isTablet = MediaQuery.of(context).size.width > 600 && !isDesktop;
-
     if (_isLoadingRole || _userRole == null) {
       return CustomScaffold(
         title: _company['name'] ?? 'Company',
@@ -261,8 +213,6 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
       );
     }
 
-    final caps = RoleCaps.from(_userRole);
-    final isAdminOrEditor = caps.canSeeDashboard;
     final companyId =
         widget.companyData['id'] ?? widget.companyData['company_id'];
 
@@ -297,17 +247,17 @@ class _CompanyDetailPageState extends State<CompanyDetailPage> {
               ),
               actionButtons: buildActionButtons(
                 context,
-                caps.isViewer,
-                caps.isFollower,
-                caps.isEmployee,
+                isViewer,
+                isFollower,
+                isEmployee,
                 companyId,
               ),
             ),
             companyTypeSection: buildCompanyTypeSection(
               _allCompanyTypes,
               _selectedCompanyTypeIds,
-              caps.isAdmin,
-              caps.isEditor,
+              isAdmin, // edit yetkisi – admin
+              isEditor, // edit yetkisi – editor
               _handleAddCompanyType,
             ),
             contactSection: buildContactSection(

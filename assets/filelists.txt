@@ -1,0 +1,260 @@
+C:\flutter\app\sea\seaofsea\lib>tree /f
+Folder PATH listing for volume Windows
+Volume serial number is 2425-68E7
+C:.
+│   l10n.yaml
+│   lib_structure.json
+│   main.dart
+│   samples.md
+│   system.json
+│
+├───l10n
+│       app_en.arb
+│       app_tr.arb
+│
+├───pages
+│       permission_debug_page.dart
+│
+├───pem
+│       seaofsea.pem
+│
+├───services
+│   │   custom_list.dart
+│   │   custom_text_editor.dart
+│   │   date_time_service.dart
+│   │   image_service.dart
+│   │   providers.dart
+│   │   routes.dart
+│   │   screensaver_service.dart
+│   │   username_history.dart
+│   │
+│   └───v1
+│           auth_service.dart
+│           company_service.dart
+│           positions_service.dart
+│           recruitment_service.dart
+│           user_service.dart
+│           v1_api_manager.dart
+│           v1_config.dart
+│
+├───utils
+│       api_manager.dart
+│       auth_provider.dart
+│       certificate_picker.dart
+│       color_blindness_provider.dart
+│       dynamic_file_provider.dart
+│       formatter.dart
+│       manual_cropper.dart
+│       menu_items_provider.dart
+│       permission_gate.dart
+│       permission_provider.dart
+│       quotes.dart
+│       role_manager.dart
+│       role_provider.dart
+│       secure_storage.dart
+│       theme_data.dart
+│       theme_provider.dart
+│       theme_selector.dart
+│
+├───views
+│   │   admin_dashboard.dart
+│   │   admin_tool_panel.dart
+│   │   companies.zip
+│   │   first_page.dart
+│   │   home_page.dart
+│   │   public_profile_page.dart
+│   │   terms.dart
+│   │
+│   ├───auth
+│   │       auth_page.dart
+│   │       forgot_password.dart
+│   │       login_page.dart
+│   │       register_page.dart
+│   │
+│   ├───companies
+│   │   │   company_contact_info.dart
+│   │   │   company_detail_page.dart
+│   │   │   company_helpers.dart
+│   │   │   update_company_page.dart
+│   │   │
+│   │   ├───announcements
+│   │   │       company_announcements_page.dart
+│   │   │
+│   │   ├───config
+│   │   │       contact_field_definitions.dart
+│   │   │       position_permissions_page.dart
+│   │   │
+│   │   ├───controllers
+│   │   │       company_detail_controller.dart
+│   │   │
+│   │   ├───dashboard
+│   │   │   │   company_dashboard.dart
+│   │   │   │
+│   │   │   ├───controller
+│   │   │   │       dashboard_controller.dart
+│   │   │   │
+│   │   │   ├───models
+│   │   │   │       announcement.dart
+│   │   │   │       application.dart
+│   │   │   │       dashboard_models.dart
+│   │   │   │
+│   │   │   ├───services
+│   │   │   │       announcements_service.dart
+│   │   │   │       company_dashboard_service.dart
+│   │   │   │
+│   │   │   └───widgets
+│   │   │           address_expandable_card.dart
+│   │   │           address_expandable_list.dart
+│   │   │           announcements_section.dart
+│   │   │           announcements_slot.dart
+│   │   │           announcement_card.dart
+│   │   │           announcement_form.dart
+│   │   │           company_app_counters.dart
+│   │   │           contact_line.dart
+│   │   │           contact_summary_card.dart
+│   │   │           header_card.dart
+│   │   │           kpi_grid.dart
+│   │   │           map_preview_card.dart
+│   │   │           mini_kpi_row.dart
+│   │   │           people_snapshot_card.dart
+│   │   │           public_contact_showcase.dart
+│   │   │           public_contact_strip.dart
+│   │   │           public_hero.dart
+│   │   │           quick_actions_bar.dart
+│   │   │           recruitment_counters.dart
+│   │   │           updates_card.dart
+│   │   │           workboard.dart
+│   │   │
+│   │   ├───pages
+│   │   │       company_admin_page.dart
+│   │   │       company_applications_page.dart
+│   │   │       company_job_list_page.dart
+│   │   │       company_list_page.dart
+│   │   │       company_notifications_page.dart
+│   │   │       company_positions_page.dart
+│   │   │       company_setting_page.dart
+│   │   │       company_user_detail_page.dart
+│   │   │       company_user_page.dart
+│   │   │       create_new_company_page.dart
+│   │   │       edit_user_permissions_page.dart
+│   │   │       job_application_page.dart
+│   │   │       job_editor_page.dart
+│   │   │       job_post_detail_page.dart
+│   │   │       job_post_review_page.dart
+│   │   │       join_company_page.dart
+│   │   │       manage_companies.dart
+│   │   │       manage_company_users.dart
+│   │   │
+│   │   ├───utils
+│   │   └───widgets
+│   │       │   company_header.dart
+│   │       │   company_people_sheet.dart
+│   │       │   company_type_selector.dart
+│   │       │
+│   │       └───states
+│   │               empty_view.dart
+│   │               error_view.dart
+│   │               loading_skeleton.dart
+│   │
+│   ├───jobs
+│   │       jobs_explore_page.dart
+│   │
+│   └───user_settings
+│           contact_form_section_cv.dart
+│           cv_education_setting.dart
+│           cv_language_settings.dart
+│           cv_popup_editor.dart
+│           cv_referance_setting.dart
+│           cv_stcw_settings.dart
+│           cv_work_experience_settings.dart
+│           edit_cv_page.dart
+│           expertice_form_section_cv.dart
+│           language_settings.dart
+│           notificationforms.dart
+│           privacy_settings_page.dart
+│           profilepage_configs.dart
+│           profile_general_tab.dart
+│           profile_page.dart
+│           settings_page.dart
+│
+└───widgets
+        admin_block_controls.dart
+        auth_form.dart
+        custom_app_bar.dart
+        custom_button.dart
+        custom_form_field.dart
+        custom_image_picker.dart
+        custon_scaffold.dart
+        general_form.dart
+        guard.dart
+        ins_image.dart
+        job_post_tile.dart
+        online_images.dart
+        open_jobs_tab.dart
+        screensaver_gate.dart
+        screensaver_layer.dart
+        server_form.dart
+        show_dialog.dart
+        test_with_social_icons.dart
+        upload_progress_indicator.dart
+        v1_permission_gate.dart
+
+C:\xampp\htdocs\seaofsea\v1>tree /f
+Folder PATH listing for volume Windows
+Volume serial number is 2425-68E7
+C:.
+│   index.php
+│   README.md
+│   samples.md
+│   system.json
+│
+├───config
+│       config.php
+│
+├───core
+│       Auth.php
+│       Autoloader.php
+│       crud.php
+│       DB.php
+│       JWT.php
+│       log.php
+│       logla.php
+│       MailHandler.php
+│       permissionGate.php
+│       permissionService.php
+│       Response.php
+│       router.php
+│
+├───logs
+│       v1_error.log
+│
+├───modules
+│   │   AuditHandler.php
+│   │   AuthHandler.php
+│   │   CertificateHandler.php
+│   │   CityHandler.php
+│   │   CompanyHandler.php
+│   │   Company_announcementHandler.php
+│   │   CVHandler.php
+│   │   fileHandler.php
+│   │   FormSchemaProvider.php
+│   │   ModerationHandler.php
+│   │   permissionHandler.php
+│   │   PositionHandler.php
+│   │   ProfileFormsHandler.php
+│   │   ProfileHandler.php
+│   │   RecruitmentHandler.php
+│   │   SettingsHandler.php
+│   │   uploadHandler.php
+│   │   UserHandler.php
+│   │
+│   └───cv
+│           cv.php
+│
+├───services
+│       AuthService.php
+│
+└───storage
+    └───rate_limits
+            6e06e67856fca47aa5793980acf2ae87.json
+            f512b82d4a76e437902312f94210ac7b.json

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:seaofsea/services/v1/v1_config.dart';
 
 class OnlineImage extends StatelessWidget {
-  final String imagePath; // örn: 'images/user/user/'
-  final String imageName; // örn: 'abc.png'
+  final String imagePath;   // örn: 'images/user/user/'
+  final String imageName;   // örn: 'abc.png'
   final double sizeW;
   final double? sizeH;
   final bool rounded;
@@ -25,11 +25,8 @@ class OnlineImage extends StatelessWidget {
   });
 
   String _buildImageUrl() {
-    final base = V1Config.baseUrl.endsWith('/')
-        ? V1Config.baseUrl
-        : '${V1Config.baseUrl}';
-    final cleanPath =
-        imagePath.startsWith('/') ? imagePath.substring(1) : imagePath;
+    final base = V1Config.baseUrl.endsWith('/') ? V1Config.baseUrl : V1Config.baseUrl;
+    final cleanPath = imagePath.startsWith('/') ? imagePath.substring(1) : imagePath;
     return '${base}uploads/$cleanPath$imageName';
   }
 
@@ -60,9 +57,7 @@ class OnlineImage extends StatelessWidget {
       width: sizeW,
       height: finalSizeH,
       decoration: BoxDecoration(
-        border: border
-            ? (borderSpecs ?? Border.all(color: Theme.of(context).dividerColor))
-            : null,
+        border: border ? (borderSpecs ?? Border.all(color: Theme.of(context).dividerColor)) : null,
         shape: rounded ? BoxShape.circle : BoxShape.rectangle,
       ),
       child: image,
@@ -74,9 +69,7 @@ class OnlineImage extends StatelessWidget {
       width: sizeW,
       height: h,
       decoration: BoxDecoration(
-        border: border
-            ? (borderSpecs ?? Border.all(color: Theme.of(context).dividerColor))
-            : null,
+        border: border ? (borderSpecs ?? Border.all(color: Theme.of(context).dividerColor)) : null,
         shape: rounded ? BoxShape.circle : BoxShape.rectangle,
       ),
       child: _fallbackChild(),

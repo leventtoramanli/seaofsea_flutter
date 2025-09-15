@@ -154,13 +154,13 @@ class DashboardController extends ChangeNotifier {
     _setLoading();
 
     try {
+      // openJobs'u beklet → önce role'u öğrenelim
       final results = await Future.wait([
         service.fetchRole(companyId, context: context),
         service.fetchDetail(companyId, context: context),
         service.fetchApplicationBuckets(companyId, context: context),
         service.fetchMembersTotal(companyId,
             status: 'approved', context: context),
-        service.fetchOpenJobs(companyId, context: context),
         service.fetchTopPeople(companyId, context: context),
       ]);
 
@@ -170,11 +170,24 @@ class DashboardController extends ChangeNotifier {
       final detail = results[1] as Map<String, dynamic>?;
       final buckets = results[2] as Map<ApplicationStatus, int>;
       final membersApproved = results[3] as int;
-      final openJobs = results[4] as int;
-      final topPeople = results[5] as List<Map<String, dynamic>>;
+      final topPeople = results[4] as List<Map<String, dynamic>>;
 
       final followers = int.tryParse('${detail?['follower_count'] ?? 0}') ?? 0;
       final contact = service.extractContact(detail?['contact_info']);
+
+      // 🔑 openJobs’u role’a göre çek
+      int openJobs = 0;
+      try {
+        final isEmployee =
+            role == 'admin' || role == 'editor' || role == 'viewer';
+        openJobs = isEmployee
+            ? await service.fetchOpenJobs(companyId, context: context)
+            : await service.fetchPublishedCount(companyId, context: context);
+      } catch (_) {
+        openJobs = 0;
+      }
+
+      if (seq != _loadSeq) return;
 
       _setData(
         role: role,
@@ -188,7 +201,6 @@ class DashboardController extends ChangeNotifier {
       );
 
       await loadAnnouncements(context: context);
-      
     } catch (_) {
       if (seq != _loadSeq) return;
       _setError('Failed to load dashboard');
@@ -200,6 +212,25 @@ class DashboardController extends ChangeNotifier {
       final role =
           await service.fetchRole(companyId, context: context) ?? 'none';
       _setState(_state.copyWith(role: role, error: null));
+    } catch (_) {}
+  }
+
+  Future<void> refreshOpenJobsPublic({BuildContext? context}) async {
+    try {
+      final role = _state.role;
+      final isEmployee =
+          role == 'admin' || role == 'editor' || role == 'viewer';
+      final n = isEmployee
+          ? await service.fetchOpenJobs(companyId, context: context)
+          : await service.fetchPublishedCount(companyId, context: context);
+      _setState(_state.copyWith(openJobs: n, error: null));
+    } catch (_) {}
+  }
+
+  Future<void> refreshOpenJobs({BuildContext? context}) async {
+    try {
+      final open = await service.fetchOpenJobs(companyId, context: context);
+      _setState(_state.copyWith(openJobs: open, error: null));
     } catch (_) {}
   }
 
