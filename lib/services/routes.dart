@@ -9,6 +9,7 @@ import 'package:seaofsea/views/auth/auth_page.dart';
 import 'package:seaofsea/views/companies/pages/job_post_review_page.dart';
 import 'package:seaofsea/views/home_page.dart';
 import 'package:seaofsea/views/public_profile_page.dart';
+import 'package:seaofsea/views/user_settings/my_applications_page.dart';
 import 'package:seaofsea/views/user_settings/settings_page.dart';
 
 // Companies
@@ -268,6 +269,8 @@ Route<dynamic>? generateRoute(RouteSettings settings) {
       final args = settings.arguments as Map?;
       final id = args?['post_id'] as int? ?? 0;
       return MaterialPageRoute(builder: (_) => JobPostReviewPage(postId: id));
+    case MyApplicationsPage.routeName:
+      return MaterialPageRoute(builder: (_) => const MyApplicationsPage());
 
     default:
       return MaterialPageRoute(

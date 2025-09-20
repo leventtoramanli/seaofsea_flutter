@@ -1,9 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:seaofsea/services/v1/recruitment_service.dart';
 import 'package:seaofsea/services/v1/v1_api_manager.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
+import 'package:seaofsea/views/user_settings/my_applications_page.dart';
 import 'package:seaofsea/widgets/custon_scaffold.dart';
 import 'package:seaofsea/widgets/open_jobs_tab.dart';
 
@@ -258,27 +260,17 @@ class _HomePageState extends State<HomePage> {
       final v1 = context.read<V1ApiManager>();
       final res = await v1.call(
         module: 'recruitment',
-        action: 'app_list_for_user',
+        action: 'post_public_open_list',
         params: {
-          'status': 'published',
-          'visibility': 'public',
-          'page': 1,
-          'perPage': 10,
+          'limit': 10,
+          // istersen arama: 'q': 'captain',
         },
       );
 
       final data = res['data'];
-      List items;
-      if (data is Map) {
-        items =
-            (data['items'] ?? data['jobs'] ?? data['results'] ?? []) as List;
-      } else if (data is List) {
-        items = data;
-      } else {
-        items = const [];
-      }
-
-      _latestJobs = items
+      final itemsRaw =
+          (data is Map) ? (data['items'] as List? ?? const []) : const [];
+      _latestJobs = itemsRaw
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
@@ -348,28 +340,47 @@ class _HomePageState extends State<HomePage> {
 
       // 2) Başvurularım
       final apps = await _fetchTotal(
-        module: 'companyjob',
-        action: 'my_applications',
-        params: {'status': 'submitted', 'page': 1, 'perPage': 1},
+        module: 'recruitment',
+        action: 'app_list_for_user',
+        params: {'page': 1, 'per_page': 1}, // total döner
       );
 
       // 3) Açık ilanlar (şirket modunda)
       int openJobs = 0;
       if (_contextIsCompany && companyId != null) {
         openJobs = await _fetchTotal(
-          module: 'companyjob',
-          action: 'list',
+          module: 'recruitment',
+          action: 'post_list',
           params: {
             'company_id': companyId,
-            'status': 'open',
+            'status': 'published',
             'page': 1,
-            'perPage': 1
+            'per_page': 1,
           },
         );
       }
 
       // 4) Profil % (sonra gerçek hesap bağlanacak)
-      final int? pct = null;
+      int? pct;
+      int minReq = 50; // fallback
+      List<String> missing = const [];
+
+      try {
+        final m = await RecruitmentServiceV1.cvProfilePercent();
+        final v = m['percent'];
+        pct = (v is int) ? v : int.tryParse('$v');
+
+        final r = m['required_min'];
+        minReq = (r is int) ? r : int.tryParse('$r') ?? 50;
+
+        final ml = m['missing_labels'];
+        if (ml is List) {
+          missing = ml.whereType<String>().toList();
+        }
+      } catch (_) {
+        pct = null; // skeleton/boş bırak
+        // minReq=50 olarak kalsın
+      }
 
       if (!mounted) return;
       setState(() {
@@ -660,9 +671,11 @@ class _HomePageState extends State<HomePage> {
           title: 'Notifications',
           count: _kpiNotifications),
       _KpiItem(
-          icon: Icons.assignment_outlined,
-          title: 'My Applications',
-          count: _kpiApplications),
+        icon: Icons.assignment_outlined,
+        title: 'My Applications',
+        count: _kpiApplications,
+        onTap: () => Navigator.pushNamed(context, MyApplicationsPage.routeName),
+      ),
       _KpiItem(
           icon: Icons.person_pin_circle_outlined,
           title: 'Profile %',
@@ -690,7 +703,7 @@ class _HomePageState extends State<HomePage> {
     Color textColor,
   ) {
     final loading = item.count == null;
-    return Container(
+    final card = Container(
       width: 180,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -726,6 +739,13 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+
+    return item.onTap == null
+        ? card
+        : InkWell(
+            onTap: item.onTap,
+            borderRadius: BorderRadius.circular(12),
+            child: card);
   }
 
   // =========================
@@ -760,11 +780,18 @@ class _HomePageState extends State<HomePage> {
               // const kaldırıldı, çünkü içinde stateful widget (OpenJobsTab) var
               child: TabBarView(
                 // İstersen kaydırmayı kapat: physics: const NeverScrollableScrollPhysics(),
-                children: const [
+                children: [
                   OpenJobsTab(
                     fixedHeight: 220,
                   ),
-                  _EmptyListPlaceholder(label: 'Applications list'),
+                  Center(
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pushNamed(
+                          context, MyApplicationsPage.routeName),
+                      icon: const Icon(Icons.assignment_outlined),
+                      label: const Text('Go to My Applications'),
+                    ),
+                  ),
                   _EmptyListPlaceholder(label: 'Work/Items awaiting approval'),
                   _EmptyListPlaceholder(label: 'List of messages'),
                 ],
@@ -985,13 +1012,19 @@ class _HomePageState extends State<HomePage> {
             ),
             const Divider(height: 12),
             ..._latestJobs.map((j) {
-              final id = int.tryParse('${j['id'] ?? j['job_id'] ?? 0}') ?? 0;
+              final id = int.tryParse('${j['id'] ?? 0}') ?? 0;
               final title = (j['title'] ?? 'Untitled').toString();
-              final companyName =
-                  (j['company_name'] ?? j['company'] ?? '').toString();
+              final companyName = (j['company_name'] ?? '').toString();
               final companyId = int.tryParse('${j['company_id'] ?? 0}') ?? 0;
-              final location = (j['location'] ?? j['city'] ?? '').toString();
-              final createdAt = (j['created_at'] ?? '').toString();
+              final min_salary =
+                  double.tryParse('${j['min_salary'] ?? 0}') ?? 0;
+              final location =
+                  (j['location'] ?? j['city_name'] ?? '').toString();
+              final createdAt = (j['created_at'] ??
+                      j['published_at'] ??
+                      j['updated_at'] ??
+                      '')
+                  .toString();
 
               return ListTile(
                 dense: true,
@@ -1003,6 +1036,7 @@ class _HomePageState extends State<HomePage> {
                   if (companyName.isNotEmpty) companyName,
                   if (location.isNotEmpty) '• $location',
                   if (createdAt.isNotEmpty) '• $createdAt',
+                  if (min_salary > 0) '• \$${min_salary.toStringAsFixed(2)}',
                 ].join('  ')),
                 trailing: OutlinedButton(
                   onPressed: id <= 0
@@ -1041,8 +1075,10 @@ class _Module {
 class _KpiItem {
   final IconData icon;
   final String title;
-  final int? count; // null => loading placeholder
-  const _KpiItem({required this.icon, required this.title, this.count});
+  final int? count;
+  final VoidCallback? onTap;
+  const _KpiItem(
+      {required this.icon, required this.title, this.count, this.onTap});
 }
 
 class _EmptyListPlaceholder extends StatelessWidget {

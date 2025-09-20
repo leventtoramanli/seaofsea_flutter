@@ -278,14 +278,13 @@ class RecruitmentServiceV1 {
   // APPLICATIONS (BAŞVURU)
   // ------------------------
 
-  /// (Aday) Başvuru gönderir.
-  /// Not: actor kendi adına başvurur; userId gerekmez.
   static Future<dynamic> appSubmit({
     required int companyId,
     int? jobPostId,
     String? coverLetter,
     dynamic cvSnapshot,
     dynamic attachments,
+    int? includeCvSnapshot,
   }) {
     return _call('app_submit', {
       'company_id': companyId,
@@ -293,6 +292,7 @@ class RecruitmentServiceV1 {
       if (coverLetter != null) 'cover_letter': coverLetter,
       if (cvSnapshot != null) 'cv_snapshot': cvSnapshot,
       if (attachments != null) 'attachments': attachments,
+      if (includeCvSnapshot != null) 'include_cv_snapshot': includeCvSnapshot,
     });
   }
 
@@ -303,21 +303,25 @@ class RecruitmentServiceV1 {
     required int jobPostId,
     int? userId,
     String? coverLetter,
-    dynamic cvSnapshot,
-    dynamic attachments,
+    @Deprecated(
+        'Use includeCvSnapshot=1 to let server build snapshot from stored CV')
+    dynamic cvSnapshot, // backward-compat
+
+    List<Map<String, dynamic>>? attachments,
+    int includeCvSnapshot = 0,
   }) {
-    return _call('app_create', {
+    final params = <String, dynamic>{
       'company_id': companyId,
       'job_post_id': jobPostId,
       if (userId != null) 'user_id': userId,
-      if (coverLetter != null) 'cover_letter': coverLetter,
+      if (coverLetter != null && coverLetter.trim().isNotEmpty)
+        'cover_letter': coverLetter.trim(),
+      'include_cv_snapshot': includeCvSnapshot,
       if (cvSnapshot != null) 'cv_snapshot': cvSnapshot,
-      if (attachments != null) 'attachments': attachments,
-    });
-  }
-
-  static Future<dynamic> appWithdraw({required int applicationId}) {
-    return _call('app_withdraw', {'application_id': applicationId});
+      if (attachments != null && attachments.isNotEmpty)
+        'attachments': attachments,
+    };
+    return _call('app_create', params);
   }
 
   /// Şirket başvuruları
@@ -412,5 +416,120 @@ class RecruitmentServiceV1 {
   // RecruitmentServiceV1 içine ekle:
   static Future<dynamic> postPublicDetail({required int id}) {
     return _call('post_public_detail', {'id': id});
+  }
+
+  /// (Aday) Kendi başvurularını listeler (sayfalı + filtreli)
+  /// Backend action: app_list_for_user  (alias: list_mine)
+  static Future<dynamic> appListMine({
+    int page = 1,
+    int perPage = 25, // 25|50|100
+    List<String>? statuses, // ['submitted','under_review',...]
+    String? q,
+    int? companyId,
+    int? jobPostId,
+  }) {
+    final params = <String, dynamic>{
+      'page': page,
+      'per_page': perPage,
+      if (statuses != null && statuses.isNotEmpty) 'status': statuses,
+      if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+      if (companyId != null) 'company_id': companyId,
+      if (jobPostId != null) 'job_post_id': jobPostId,
+    };
+    return _call('app_list_for_user', params);
+    // Not: Backend’de yalnız `list_mine` varsa, ufak bir alias ekleriz.
+  }
+
+  /// UI’de pratik kullanım için normalize edilmiş liste
+  /// Döndürür: { items: List<Map>, total: int, page?:int, per_page?:int, pages?:int }
+  static Future<Map<String, dynamic>> appListMineNormalized({
+    int page = 1,
+    int perPage = 25,
+    List<String>? statuses,
+    String? q,
+    int? companyId,
+    int? jobPostId,
+  }) async {
+    final raw = await appListMine(
+      page: page,
+      perPage: perPage,
+      statuses: statuses,
+      q: q,
+      companyId: companyId,
+      jobPostId: jobPostId,
+    );
+
+    // Temel normalize (items/total)
+    final base = _normalizeList(raw);
+    // Sayfalama alanlarını da korumaya çalış
+    final d = _unwrap(raw);
+    final result = <String, dynamic>{
+      'items': base['items'],
+      'total': base['total'],
+    };
+    if (d is Map) {
+      for (final k in const ['page', 'per_page', 'pages']) {
+        if (d[k] != null) result[k] = d[k];
+      }
+    }
+    result.putIfAbsent('page', () => page);
+    result.putIfAbsent('per_page', () => perPage);
+    result.putIfAbsent('pages', () {
+      final t = result['total'] as int? ?? 0;
+      return (t == 0) ? 0 : ((t + perPage - 1) ~/ perPage);
+    });
+    return result;
+  }
+
+  /// (Aday) Başvuru detayı (+ history)
+  /// Backend action: app_detail_mine  (alias: detail_mine)
+  /// Döner: { application:{...}, status_history:[...], notes:[] }
+  static Future<dynamic> appDetailMine({required int applicationId}) {
+    return _call('app_detail_mine', {'application_id': applicationId});
+  }
+
+  /// (Aday) Başvurusunu geri çeker
+  /// Backend action: app_withdraw  (alias: withdraw)
+  /// Döner: { id, status:'withdrawn' }
+  static Future<dynamic> appWithdrawMine({required int applicationId}) {
+    return _call('app_withdraw', {'application_id': applicationId});
+  }
+
+  // RecruitmentServiceV1 içinde:
+  static Future<dynamic> appWithdraw({required int applicationId}) {
+    return appWithdrawMine(applicationId: applicationId);
+  }
+
+  // RecruitmentServiceV1 içinde
+  static Future<Map<String, dynamic>> cvProfilePercent() async {
+    final res = await _call('cv_profile_percent', {});
+    dynamic d = res;
+    if (d is Map && d['data'] != null) d = d['data'];
+    if (d is Map && d['data'] != null) d = d['data']; // ikinci katman olursa
+    if (d is Map) {
+      // Beklenen alanları normalize et
+      final m = Map<String, dynamic>.from(d);
+      m['percent'] = (m['percent'] is int)
+          ? m['percent']
+          : int.tryParse('${m['percent']}') ?? 0;
+      m['required_min'] = (m['required_min'] is int)
+          ? m['required_min']
+          : int.tryParse('${m['required_min']}') ?? 50;
+      // Liste alanlarını normalize et
+      final ml = m['missing_labels'];
+      if (ml is List) {
+        m['missing_labels'] = ml.map((e) => '$e').toList();
+      } else {
+        m['missing_labels'] = const <String>[];
+      }
+      return m;
+    }
+    // Güvenli varsayılan
+    return const {
+      'percent': 0,
+      'required_min': 50,
+      'missing_labels': <String>[],
+      'strategy': 'unknown',
+    };
   }
 }

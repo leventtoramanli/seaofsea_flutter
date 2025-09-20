@@ -7,6 +7,7 @@ import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/color_blindness_provider.dart';
 import 'package:seaofsea/utils/dynamic_file_provider.dart';
 import 'package:seaofsea/utils/menu_items_provider.dart';
+import 'package:seaofsea/utils/my_applications_providers.dart';
 import 'package:seaofsea/utils/permission_provider.dart';
 import 'package:seaofsea/utils/role_provider.dart';
 import 'package:seaofsea/utils/theme_provider.dart';
@@ -21,6 +22,7 @@ List<SingleChildWidget> providers = [
   ChangeNotifierProvider(create: (_) => DynamicFieldProvider()),
   ChangeNotifierProvider(create: (_) => PermissionProvider()),
   ChangeNotifierProvider(create: (_) => ScreenSaverService()..init()),
+  ChangeNotifierProvider(create: (_) => MyApplicationsProvider()),
   ProxyProvider<AuthProvider, ApiManager>(
     update: (context, authProvider, apiManager) =>
         ApiManager(authProvider.token),

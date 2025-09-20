@@ -11,6 +11,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:seaofsea/services/v1/auth_service.dart';
+import 'package:seaofsea/utils/app_exceptions.dart';
 import 'package:seaofsea/utils/auth_provider.dart';
 import 'package:seaofsea/utils/secure_storage.dart';
 import 'v1_config.dart';
@@ -155,6 +156,38 @@ class V1ApiManager {
     final ok = await f;
     if (identical(_reauthLock, f)) _reauthLock = null;
     return ok;
+  }
+
+  // === Email verification helpers ===
+  bool _isEmailVerificationMessage(String? s) {
+    if (s == null) return false;
+    final t = s.toLowerCase();
+    return t.contains('email verification is required');
+  }
+
+  /// Throws EmailVerificationRequired if backend indicates email verification gate.
+  void _throwIfEmailVerificationError(int? httpStatus, dynamic body) {
+    // 1) HTTP 403 + message (preferred)
+    if (httpStatus == 403) {
+      final msg =
+          (body is Map ? (body['message'] ?? body['error']) : null)?.toString();
+      if (_isEmailVerificationMessage(msg)) {
+        throw EmailVerificationRequired();
+      }
+    }
+
+    // 2) Some backends return 200 but success:false + code/message
+    if (body is Map && body['success'] == false) {
+      final code = body['code'];
+      final msg = (body['message'] ?? body['error'])?.toString();
+      if (_isEmailVerificationMessage(msg) || code == 4031) {
+        throw EmailVerificationRequired(
+          (msg?.isNotEmpty ?? false)
+              ? msg!
+              : 'Email verification is required to perform this action.',
+        );
+      }
+    }
   }
 
   Future<Map<String, dynamic>> call({
@@ -305,6 +338,7 @@ class V1ApiManager {
       }
 
       final decoded = response.data;
+      _throwIfEmailVerificationError(response.statusCode, decoded);
       return {
         'success': decoded is Map && decoded['success'] == true,
         'message':
@@ -400,6 +434,7 @@ class V1ApiManager {
         }
       }
 
+      _throwIfEmailVerificationError(e.response?.statusCode, e.response?.data);
       final resData = e.response?.data;
       final msg = (resData is Map && resData['message'] != null)
           ? resData['message'].toString()

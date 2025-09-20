@@ -56,15 +56,22 @@ class _JobApplicationPageState extends State<JobApplicationPage> {
   Future<void> _withdraw() async {
     final id = _createdApplicationId;
     if (id == null) {
-      _snack('Önce bir başvuru oluşturulmalı.');
+      _snack('You need to create an application first.');
       return;
     }
+
     setState(() => _busy = true);
     try {
-      await RecruitmentServiceV1.appWithdraw(applicationId: id);
-      _snack('Başvuru geri çekildi (#$id)');
+      // Use the "mine" endpoint (candidate self-withdraw)
+      await RecruitmentServiceV1.appWithdrawMine(applicationId: id);
+
+      _snack('Application withdrawn (#$id).');
+
+      // (Opsiyonel) UI’yi temizle ya da listeye yönlendir:
+      // setState(() => _createdApplicationId = null);
+      // Navigator.pushNamed(context, '/my_applications', arguments: {'highlight_id': id});
     } catch (e) {
-      _snack('Geri çekme hatası: $e');
+      _snack('Withdraw failed: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
